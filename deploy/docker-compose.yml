@@ -14,9 +14,10 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-time-zone=+08:00
-      # Para sa 2 GB na server na kasama ang Java
-      - --innodb-buffer-pool-size=384M
-      - --max-connections=80
+      # Default ay para sa 1 GB na server. Para sa 2 GB: MYSQL_BUFFER_POOL=384M
+      - --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-128M}
+      - --max-connections=${MYSQL_MAX_CONNECTIONS:-40}
+      - --performance-schema=OFF
     volumes:
       - dbdata:/var/lib/mysql
     healthcheck:
@@ -36,7 +37,7 @@ services:
         condition: service_healthy
     environment:
       TZ: Asia/Manila
-      JAVA_TOOL_OPTIONS: -Xms256m -Xmx768m
+      JAVA_TOOL_OPTIONS: ${JAVA_OPTS:--Xms128m -Xmx384m -XX:MaxMetaspaceSize=192m}
       SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/${MYSQL_DATABASE:-practicum}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Manila
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-practicum}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
