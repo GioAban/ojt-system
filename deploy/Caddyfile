@@ -1,0 +1,25 @@
+# SITE_ADDRESS=:80 habang IP lang (HTTP). Kapag may domain: practicum.iyongdomain.com
+# at awtomatikong magkakaroon ng HTTPS (Let's Encrypt). Kailangang bukas ang port 80 at 443.
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	request_body {
+		max_size 30MB
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

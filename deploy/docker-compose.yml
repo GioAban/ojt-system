@@ -1,0 +1,74 @@
+# Gamitin: docker compose --env-file .env up -d --build
+# Ilagay ang deploy/ files sa ugat ng project (katabi ng backend/ at frontend/)
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-practicum}
+      MYSQL_USER: ${MYSQL_USER:-practicum}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Manila
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+      # Para sa 2 GB na server na kasama ang Java
+      - --innodb-buffer-pool-size=384M
+      - --max-connections=80
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    # Hindi naka-publish sa labas: backend lang ang nakakakita
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Manila
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx768m
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/${MYSQL_DATABASE:-practicum}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Manila
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-practicum}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${DDL_AUTO:-update}
+      SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE: 25MB
+      SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: 30MB
+      APP_S3_BUCKET: ${APP_S3_BUCKET}
+      APP_S3_REGION: ${AWS_REGION:-ap-southeast-1}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      SPRING_JPA_SHOW_SQL: "false"
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  dbdata:
+  caddy_data:
+  caddy_config:

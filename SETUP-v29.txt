@@ -1,0 +1,35 @@
+v29 - Company apply / request / duplicate warning / Deployed gating
+===================================================================
+I-extract sa D:\practicum (papalitan ang files na kapareho ng path).
+
+BAGO (backend)
+- model/CompanyApplication.java            -> table company_applications (auto ddl-auto=update)
+- repository/CompanyApplicationRepository.java
+- service/CompanyMatch.java                -> pang-detect ng kapareho (ABC Corp. = abc corporation)
+- controller/StudentCompanyController.java -> /api/student/company/{overview,applications,check,requests}
+- controller/CoordinatorApplicationsController.java -> /api/coordinator/company-applications
+PINALITAN
+- service/StudentWorkService.java -> Weekly, DTR at Post-Deployment requirements nakikita lang kapag Deployed/Completed
+
+BAGO / PINALITAN (frontend)
+- types/companyApplications.ts
+- components/students/RequestCompanyDialog.tsx  (form + duplicate warning)
+- components/students/ApplicationsTab.tsx       (coordinator: accept & deploy / decline with reason)
+- pages/student/Companies.tsx                   (Apply, My applications, My requests, Request button)
+- pages/coordinator/Students.tsx                (bagong tab "Company applications"; hindi ko ginalaw ang iba)
+- pages/StudentHome.tsx, components/TabBar.tsx  (lock icon + paliwanag sa Weekly/DTR/Post kapag hindi pa Deployed)
+
+FLOW
+1. Student na Approved lang ang pwedeng mag-apply (max 3 pending) o mag-request.
+2. Request ng bagong company/department -> pending; lalabas sa coordinator Host Training > Requests (kita ang student at company),
+   approve/decline doon (existing). May notification ang coordinator (bell) at ang student (approve/decline).
+3. Bago i-send: habang nagta-type, may warning kung may kapareho nang company/department (kasama ang pending).
+   - Exact na department sa company = hindi pwedeng ipadala.
+   - Kapareho ang company = kailangan piliin ang existing ("It's this company") o i-tick na "different company".
+4. Apply sa department -> coordinator bell + Students > Company applications tab.
+   Accept & deploy -> student.department = napili, status = Deployed, deployed date = ngayon,
+   ibang pending apps niya = cancelled, may notification ang student. Decline -> kailangan ng reason (private, kita ng student).
+5. Deployed (o Completed) lang ang may Weekly Report, DTR, Post-Deployment (frontend at backend).
+
+NOTE: Students.tsx ay base sa kopya ko (Oct 11). Kung may binago ka roon, 4 lang ang dagdag:
+ import ApplicationsTab + Building2, tab state na may "applications", TabButton, at <ApplicationsTab/> panel.

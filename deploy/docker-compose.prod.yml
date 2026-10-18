@@ -1,0 +1,9 @@
+# Idinadagdag sa docker-compose.yml sa server. Hindi nagbi-build sa server:
+# kinukuha lang ang images na ginawa ng GitHub Actions.
+services:
+  backend:
+    image: ${IMAGE_PREFIX}-backend:${IMAGE_TAG:-latest}
+    pull_policy: always
+  web:
+    image: ${IMAGE_PREFIX}-web:${IMAGE_TAG:-latest}
+    pull_policy: always

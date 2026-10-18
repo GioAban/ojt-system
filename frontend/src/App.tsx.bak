@@ -1,0 +1,126 @@
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import RoleRoute from "@/components/RoleRoute";
+import SemesterLayout from "@/components/SemesterLayout";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
+import Dashboard from "@/pages/Dashboard";
+import StudentHome from "@/pages/StudentHome";
+import ComingSoon from "@/pages/ComingSoon";
+import Semesters from "@/pages/admin/Semesters";
+import Colleges from "@/pages/admin/Colleges";
+import Programs from "@/pages/admin/Programs";
+import Coordinators from "@/pages/admin/Coordinators";
+import Tracking from "@/pages/coordinator/Tracking";
+
+function App() {
+  return (
+    <TooltipProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+
+          {/* Lahat ng nasa loob nito ay may access sa napiling semester */}
+          <Route element={<SemesterLayout />}>
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/student/home"
+              element={
+                <ProtectedRoute>
+                  <StudentHome />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <ComingSoon title="Profile" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <ComingSoon title="Settings" />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Director */}
+            <Route
+              path="/admin/semesters"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["ADMIN"]}>
+                    <Semesters />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/colleges"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["ADMIN"]}>
+                    <Colleges />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/programs"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["ADMIN"]}>
+                    <Programs />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/coordinators"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["ADMIN"]}>
+                    <Coordinators />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Coordinator */}
+            <Route
+              path="/coordinator/tracking"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["COORDINATOR"]}>
+                    <Tracking />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+      <Toaster theme="light" position="bottom-right" richColors closeButton />
+    </TooltipProvider>
+  );
+}
+
+export default App;
