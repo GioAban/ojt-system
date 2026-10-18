@@ -32,7 +32,11 @@ export function LoginForm({ onSubmit }: Props) {
     try {
       await onSubmit(identifier.trim(), password);
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : getErrorMessage(err, "Wrong email, Student ID, or password."));
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : getErrorMessage(err, "Wrong email, Student ID, or password."),
+      );
       setLoading(false);
     }
   }
@@ -40,11 +44,13 @@ export function LoginForm({ onSubmit }: Props) {
   return (
     <div className="rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
       <h2 className="text-xl font-semibold tracking-tight">Sign in</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Use your email or your Student ID.</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Use your email or your Student ID.
+      </p>
 
       <form onSubmit={submit} noValidate className="mt-6 flex flex-col gap-4">
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium">Email or Student ID</span>
+          <span className="font-medium">Hello Guys: Email or Student ID</span>
           <Input
             value={identifier}
             onChange={(e) => {
@@ -79,13 +85,20 @@ export function LoginForm({ onSubmit }: Props) {
               aria-label={show ? "Hide password" : "Show password"}
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
             >
-              {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {show ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
             </button>
           </div>
         </label>
 
         {error && (
-          <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p
+            role="alert"
+            className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
             {error}
           </p>
         )}
@@ -103,7 +116,10 @@ export function LoginForm({ onSubmit }: Props) {
 
       <div className="mt-6 border-t pt-5 text-sm">
         <p className="font-medium">Don't have an account?</p>
-        <p className="mt-0.5 text-muted-foreground">Contact your OJT coordinator. Forgot your password? They can reset it for you.</p>
+        <p className="mt-0.5 text-muted-foreground">
+          Contact your OJT coordinator. Forgot your password? They can reset it
+          for you.
+        </p>
       </div>
     </div>
   );
