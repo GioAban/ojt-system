@@ -99,7 +99,8 @@ export default function HostTraining() {
   useEffect(() => {
     if (semesterId === null) return;
     const run = () => {
-      if (document.visibilityState === "visible") void refreshRequests.current();
+      if (document.visibilityState === "visible")
+        void refreshRequests.current();
     };
     const id = window.setInterval(run, 30_000);
     window.addEventListener("focus", run);
@@ -664,6 +665,7 @@ export default function HostTraining() {
             <RequestsPanel
               data={requestsSection.data}
               loading={requestsSection.loading}
+              semesterId={semesterId}
               onChanged={async () => {
                 await Promise.all([requestsSection.refresh(), refresh()]);
               }}
