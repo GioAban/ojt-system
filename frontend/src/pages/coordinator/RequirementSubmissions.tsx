@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import {
   ArrowLeft,
   ChevronDown,
@@ -13,6 +18,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import { postBulk } from "@/lib/bulk";
+import { BulkHoursDialog } from "@/components/tracking/BulkHoursDialog";
 import { formatFullDate, formatPeriod } from "@/lib/dates";
 import { getErrorMessage } from "@/lib/errors";
 import { openExternalLink, openProtectedFile } from "@/lib/files";
@@ -30,7 +36,10 @@ import type {
 } from "@/types/requirements";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MaterialChip } from "@/components/requirements/MaterialChip";
-import { StatusPairDialog, type PairValues } from "@/components/tracking/StatusPairDialog";
+import {
+  StatusPairDialog,
+  type PairValues,
+} from "@/components/tracking/StatusPairDialog";
 import { PrivateComments } from "@/components/requirements/PrivateComments";
 import { EditRequirementDialog } from "@/components/requirements/EditRequirementDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -178,7 +187,10 @@ function filterOptions(
   kind: RequirementKind,
 ): { value: string; label: string }[] {
   return [
-    { value: "all", label: kind === "document" ? "All statuses" : "All students" },
+    {
+      value: "all",
+      label: kind === "document" ? "All statuses" : "All students",
+    },
     { value: "turned", label: "Turned in" },
     { value: "missing", label: "Not submitted" },
     { value: "FOR_CHECKING", label: "For checking" },
@@ -276,11 +288,7 @@ function HoursEditor({ value, pending, onSave }: HoursEditorProps) {
         value={draft}
         onChange={(e) => setDraft(e.target.value.replace(/[^\d.]/g, ""))}
       />
-      <Button
-        type="submit"
-        size="sm"
-        disabled={pending || !dirty}
-      >
+      <Button type="submit" size="sm" disabled={pending || !dirty}>
         Save
       </Button>
     </form>
@@ -342,6 +350,7 @@ export default function RequirementSubmissions({
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkHoursOpen, setBulkHoursOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   /** Modal para sa status at evaluation (weekly) o hours (DTR) */
   const [pair, setPair] = useState<{
@@ -368,7 +377,9 @@ export default function RequirementSubmissions({
             .catch(() => null);
 
     Promise.all([
-      api.get<SubmissionsData>(`${API_BASE[kind]}/${requirementId}/submissions`),
+      api.get<SubmissionsData>(
+        `${API_BASE[kind]}/${requirementId}/submissions`,
+      ),
       overlay,
     ])
       .then(([res, rows]) => {
@@ -627,7 +638,8 @@ export default function RequirementSubmissions({
     // Ang pagbabago ng hours ay laging may kumpirmasyon kasama ang status:
     // may hours = Checked, at kapag binura ang hours ng Checked, babalik ito sa For checking / Assigned
     if (hours !== null || student.status === "CHECKED") {
-      const fallback: TrackingStatus = student.files.length > 0 ? "FOR_CHECKING" : "ASSIGNED";
+      const fallback: TrackingStatus =
+        student.files.length > 0 ? "FOR_CHECKING" : "ASSIGNED";
       setPair({
         student,
         status: hours !== null ? "CHECKED" : fallback,
@@ -712,8 +724,18 @@ export default function RequirementSubmissions({
     });
   }
 
-  async function bulkSet(status: TrackingStatus, rating?: WeeklyRating) {
+  async function bulkSet(
+    status: TrackingStatus,
+    rating?: WeeklyRating,
+    hours?: number,
+  ) {
     if (!data || checked.size === 0) return;
+
+    // Sa DTR, laging humingi ng hours bago i-Checked
+    if (kind === "dtr" && status === "CHECKED" && hours === undefined) {
+      setBulkHoursOpen(true);
+      return;
+    }
 
     const studentIds = [...checked];
     const path =
@@ -730,6 +752,7 @@ export default function RequirementSubmissions({
             itemIds: [data.requirementId],
             status,
             rating: rating ?? null,
+            ...(hours !== undefined ? { hours } : {}),
           };
 
     setBulkBusy(true);
@@ -813,7 +836,12 @@ export default function RequirementSubmissions({
             onClick={() => setEditOpen(true)}
           >
             <Pencil className="mr-1.5 h-3.5 w-3.5" />
-            Edit {kind === "document" ? "requirement" : kind === "weekly" ? "week" : "month"}
+            Edit{" "}
+            {kind === "document"
+              ? "requirement"
+              : kind === "weekly"
+                ? "week"
+                : "month"}
           </Button>
         )}
       </div>
@@ -1017,7 +1045,10 @@ export default function RequirementSubmissions({
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     disabled={bulkBusy}
-                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                    })}
                   >
                     <ListChecks className="h-3.5 w-3.5" />
                     Set status
@@ -1037,16 +1068,26 @@ export default function RequirementSubmissions({
                       </DropdownMenuItem>
                     ))}
                     {kind === "weekly" &&
-                      (["EXCELLENT", "VERY_GOOD", "GOOD", "POOR"] as WeeklyRating[]).map(
-                        (rating) => (
-                          <DropdownMenuItem
-                            key={rating}
-                            onClick={() => void bulkSet("CHECKED", rating)}
-                          >
-                            Checked · {RATING[rating].label}
-                          </DropdownMenuItem>
-                        ),
-                      )}
+                      (
+                        [
+                          "EXCELLENT",
+                          "VERY_GOOD",
+                          "GOOD",
+                          "POOR",
+                        ] as WeeklyRating[]
+                      ).map((rating) => (
+                        <DropdownMenuItem
+                          key={rating}
+                          onClick={() => void bulkSet("CHECKED", rating)}
+                        >
+                          Checked · {RATING[rating].label}
+                        </DropdownMenuItem>
+                      ))}
+                    {kind === "dtr" && (
+                      <DropdownMenuItem onClick={() => setBulkHoursOpen(true)}>
+                        Checked · enter hours for all…
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button
@@ -1153,15 +1194,20 @@ export default function RequirementSubmissions({
 
                             {kind === "dtr" && (
                               <span className="text-xs text-muted-foreground">
-                                Total {formatHours(extras[s.studentId]?.renderedHours ?? 0)}
+                                Total{" "}
+                                {formatHours(
+                                  extras[s.studentId]?.renderedHours ?? 0,
+                                )}
                                 {" · To render "}
                                 {extras[s.studentId]?.trainingDuration == null
                                   ? "—"
                                   : formatHours(
                                       Math.max(
                                         0,
-                                        (extras[s.studentId]?.trainingDuration ?? 0) -
-                                          (extras[s.studentId]?.renderedHours ?? 0),
+                                        (extras[s.studentId]
+                                          ?.trainingDuration ?? 0) -
+                                          (extras[s.studentId]?.renderedHours ??
+                                            0),
                                       ),
                                     )}
                               </span>
@@ -1195,28 +1241,28 @@ export default function RequirementSubmissions({
                     </p>
                   </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        Status
-                      </span>
-                      <NativeSelect
-                        aria-label="Status"
-                        value={selected.status}
-                        disabled={pendingId === selected.studentId}
-                        onChange={(e) =>
-                          void changeStatus(
-                            selected,
-                            e.target.value as TrackingStatus,
-                          )
-                        }
-                      >
-                        {STATUS_ORDER.map((status) => (
-                          <NativeSelectOption key={status} value={status}>
-                            {STATUS[status].label}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      Status
+                    </span>
+                    <NativeSelect
+                      aria-label="Status"
+                      value={selected.status}
+                      disabled={pendingId === selected.studentId}
+                      onChange={(e) =>
+                        void changeStatus(
+                          selected,
+                          e.target.value as TrackingStatus,
+                        )
+                      }
+                    >
+                      {STATUS_ORDER.map((status) => (
+                        <NativeSelectOption key={status} value={status}>
+                          {STATUS[status].label}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </div>
 
                   {kind === "weekly" && (
                     <div className="flex items-center gap-2">
@@ -1315,7 +1361,13 @@ export default function RequirementSubmissions({
           onSaved={() => setReloadToken((t) => t + 1)}
         />
       )}
-
+      {bulkHoursOpen && (
+        <BulkHoursDialog
+          onOpenChange={setBulkHoursOpen}
+          count={checked.size}
+          onSubmit={(hours) => bulkSet("CHECKED", undefined, hours)}
+        />
+      )}
       {pair && (
         <StatusPairDialog
           key={`${pair.student.studentId}-${pair.status}`}

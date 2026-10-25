@@ -16,7 +16,8 @@ public final class CompanyRequestDtos {
             String supervisorEmail, String supervisorContactNumber,
             Long studentId, String studentNumber, String firstname, String lastname,
             String middleInitial, String subjectCode,
-            String declineReason, String reviewedAt) {}
+            String declineReason, String reviewedAt,
+            String source, String consentAt) {}
 
     public record RequestsResponse(Long semesterId, boolean accepting, long pendingCount,
                                    List<RequestRow> requests) {}

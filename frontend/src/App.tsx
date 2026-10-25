@@ -19,11 +19,16 @@ import RequirementSubmissions from "@/pages/coordinator/RequirementSubmissions";
 import HostTraining from "@/pages/coordinator/HostTraining";
 import Students from "@/pages/coordinator/Students";
 import Claim from "@/pages/Claim";
+import CompanyRequestPublic from "@/pages/CompanyRequestPublic";
 import ChangePassword from "@/pages/ChangePassword";
 import StudentCompanies from "@/pages/student/Companies";
 import ProfilePage from "@/pages/Profile";
 import WorkPage from "@/pages/student/Work";
 import StudentNotifications from "@/pages/student/Notifications";
+import StudentMyCompany from "@/pages/student/Company";
+import CoordinatorAnnouncements from "@/pages/coordinator/Announcements";
+import StudentAnnouncements from "@/pages/student/Announcements";
+import StudentProgress from "@/pages/student/Progress";
 
 function App() {
   return (
@@ -202,6 +207,26 @@ function App() {
               }
             />
             <Route
+              path="/coordinator/announcements"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["COORDINATOR"]}>
+                    <CoordinatorAnnouncements />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/student/announcements"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["STUDENT"]}>
+                    <StudentAnnouncements />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/coordinator/students"
               element={
                 <ProtectedRoute>
@@ -211,8 +236,30 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/student/progress"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["STUDENT"]}>
+                    <StudentProgress />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/student/company"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["STUDENT"]}>
+                    <StudentMyCompany />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
           </Route>
           <Route path="/claim" element={<Claim />} />
+          <Route path="/hte-request" element={<CompanyRequestPublic />} />
+          <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
@@ -221,5 +268,4 @@ function App() {
     </TooltipProvider>
   );
 }
-
 export default App;

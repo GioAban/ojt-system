@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Building2, CheckCircle2, Lock, MapPin, Phone, Plus } from "lucide-react";
+import { Navigate } from "react-router-dom";
+import { Building2, CheckCircle2, Lock, MapPin, Phone } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { notify } from "@/lib/notify";
@@ -8,7 +9,6 @@ import type { StudentCompaniesData } from "@/types/studentProfile";
 import type { CompanyOverview } from "@/types/companyApplications";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { RequestCompanyDialog } from "@/components/students/RequestCompanyDialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -45,8 +45,7 @@ export default function StudentCompanies() {
   const [data, setData] = useState<StudentCompaniesData | null>(null);
   const [overview, setOverview] = useState<CompanyOverview | null>(null);
   const [error, setError] = useState("");
-  const [requesting, setRequesting] = useState(false);
-  const [presetCompany, setPresetCompany] = useState<{ id: number; name: string } | null>(null);
+  const [assigned, setAssigned] = useState<boolean | null>(null);
   const [applying, setApplying] = useState<{ departmentId: number; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -59,11 +58,26 @@ export default function StudentCompanies() {
       .get<CompanyOverview>("/student/company/overview")
       .then((res) => setOverview(res.data))
       .catch(() => setOverview(null));
+    // Ito ang batayan kung may company na: naka-assign na ang department sa student
+    api
+      .get<{ assigned: boolean }>("/student/company/mine")
+      .then((res) => {
+        setAssigned(res.data.assigned);
+        try {
+          localStorage.setItem("has_company", String(res.data.assigned));
+        } catch {
+          // hindi kritikal
+        }
+      })
+      .catch(() => setAssigned(null));
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // May company na: wala nang listahan ng ibang company
+  if (assigned === true || overview?.deployed) return <Navigate to="/student/company" replace />;
 
   const pendingDepts = new Set(
     (overview?.applications ?? []).filter((a) => a.status === "pending").map((a) => a.departmentId),
@@ -98,11 +112,6 @@ export default function StudentCompanies() {
     }
   }
 
-  function openRequest(company: { id: number; name: string } | null) {
-    setPresetCompany(company);
-    setRequesting(true);
-  }
-
   return (
     <DashboardLayout>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -112,12 +121,6 @@ export default function StudentCompanies() {
             Companies and departments where you can do your OJT.
           </p>
         </div>
-        {canApply && overview?.accepting && (
-          <Button type="button" variant="outline" onClick={() => openRequest(null)}>
-            <Plus className="h-4 w-4" />
-            Can't find yours? Request it
-          </Button>
-        )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -147,12 +150,6 @@ export default function StudentCompanies() {
             current status: <strong>{data.status || "For Approval"}</strong>.
           </p>
         </div>
-      )}
-
-      {canApply && overview && !overview.accepting && (
-        <p className="mb-4 rounded-xl border bg-muted/40 p-3 text-sm text-muted-foreground">
-          Your coordinator isn't accepting requests for new companies right now.
-        </p>
       )}
 
       {overview && overview.applications.length > 0 && (
@@ -239,15 +236,6 @@ export default function StudentCompanies() {
             <div key={c.id} className="rounded-xl border bg-card p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <p className="font-medium">{c.name}</p>
-                {canApply && overview?.accepting && (
-                  <button
-                    type="button"
-                    className="text-xs text-primary underline"
-                    onClick={() => openRequest({ id: c.id, name: c.name })}
-                  >
-                    Request another department
-                  </button>
-                )}
               </div>
               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
@@ -304,13 +292,6 @@ export default function StudentCompanies() {
           ))}
         </div>
       )}
-
-      <RequestCompanyDialog
-        open={requesting}
-        onOpenChange={setRequesting}
-        presetCompany={presetCompany}
-        onSent={load}
-      />
 
       <ConfirmDialog
         open={applying !== null}

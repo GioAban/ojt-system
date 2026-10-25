@@ -53,6 +53,17 @@ public class Department {
     @Column(name = "reviewed_at")
     private LocalDateTime reviewedAt;
 
+    /** "company_link" kung ang company mismo ang nagpadala gamit ang public link. Null para sa student o coordinator. */
+    @Column(name = "request_source", length = 30)
+    private String requestSource;
+
+    /** Kailan pumayag ang nagsumite sa Data Privacy Notice, at kung anong bersyon ng notice */
+    @Column(name = "privacy_consent_at")
+    private LocalDateTime privacyConsentAt;
+
+    @Column(name = "privacy_notice_version", length = 20)
+    private String privacyNoticeVersion;
+
     @Column(name = "signed_moa")
     private String signedMoa;
 
@@ -117,6 +128,15 @@ public class Department {
 
     public LocalDateTime getReviewedAt() { return reviewedAt; }
     public void setReviewedAt(LocalDateTime v) { this.reviewedAt = v; }
+
+    public String getRequestSource() { return requestSource; }
+    public void setRequestSource(String v) { this.requestSource = v; }
+
+    public LocalDateTime getPrivacyConsentAt() { return privacyConsentAt; }
+    public void setPrivacyConsentAt(LocalDateTime v) { this.privacyConsentAt = v; }
+
+    public String getPrivacyNoticeVersion() { return privacyNoticeVersion; }
+    public void setPrivacyNoticeVersion(String v) { this.privacyNoticeVersion = v; }
 
     public String getSignedMoa() { return signedMoa; }
     public void setSignedMoa(String signedMoa) { this.signedMoa = signedMoa; }

@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { brand } from "@/config/brand";
 import { BrandMark } from "@/components/BrandMark";
@@ -99,15 +101,19 @@ const coordinatorLinks: SidebarLink[] = [
 function getStudentLinks(hasCompany: boolean): SidebarLink[] {
   return [
     { icon: LayoutDashboard, text: "Home", link: "/student/home" },
-    { icon: Building, text: "Companies", link: "/student/companies" },
+    // May company na: "My Company" na lang, wala nang listahan ng ibang company
+    hasCompany
+      ? { icon: Building2, text: "My Company", link: "/student/company" }
+      : { icon: Building, text: "Companies", link: "/student/companies" },
     { icon: Megaphone, text: "Announcements", link: "/student/announcements" },
-    ...(hasCompany
-      ? [{ icon: Building2, text: "Company", link: "/student/company" }]
-      : []),
+    { icon: TrendingUp, text: "Progress", link: "/student/progress" },
   ];
 }
 
-function getLinksForRole(role: string | null): SidebarLink[] {
+function getLinksForRole(
+  role: string | null,
+  studentHasCompany: boolean,
+): SidebarLink[] {
   switch (role) {
     case "ADMIN":
       return adminLinks;
@@ -119,8 +125,7 @@ function getLinksForRole(role: string | null): SidebarLink[] {
       );
     }
     case "STUDENT": {
-      const hasCompany = localStorage.getItem("has_company") === "true";
-      return getStudentLinks(hasCompany);
+      return getStudentLinks(studentHasCompany);
     }
     default:
       return [];
@@ -135,7 +140,28 @@ export function AppSidebar() {
   const location = useLocation();
   const role = localStorage.getItem("role");
 
-  const menuItems = getLinksForRole(role);
+  // Student: itinatanong sa server kung may company na, para laging tama ang menu
+  const [studentHasCompany, setStudentHasCompany] = useState(
+    () => localStorage.getItem("has_company") === "true",
+  );
+  useEffect(() => {
+    if (role !== "STUDENT") return;
+    api
+      .get<{ assigned: boolean }>("/student/company/mine")
+      .then((res) => {
+        setStudentHasCompany(res.data.assigned);
+        try {
+          localStorage.setItem("has_company", String(res.data.assigned));
+        } catch {
+          // hindi kritikal
+        }
+      })
+      .catch(() => {
+        // mananatili ang huling alam
+      });
+  }, [role]);
+
+  const menuItems = getLinksForRole(role, studentHasCompany);
 
   return (
     <Sidebar>
@@ -177,7 +203,10 @@ export function AppSidebar() {
                       {item.showPending && (
                         <CountBadge
                           count={pendingRequests}
-                          className={cn("ml-auto", isActive && "bg-white text-primary")}
+                          className={cn(
+                            "ml-auto",
+                            isActive && "bg-white text-primary",
+                          )}
                         />
                       )}
                     </SidebarMenuButton>

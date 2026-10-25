@@ -25,3 +25,4 @@ database/RDS PASSWORD.txt
 *PASSWORD*.txt
 *.pem
 *.key
+backend/local-run.sh

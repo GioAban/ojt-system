@@ -58,6 +58,11 @@ public class StudentCompanyController {
                            String deployedCompany, String deployedDepartment,
                            int maxApplications, List<ApplicationRow> applications, List<RequestRow> requests) {}
 
+    public record MyCompany(boolean assigned, String status, String companyName, String nature, String address,
+                            String location, String companyContact, String departmentName,
+                            String supervisorFullname, String supervisorPosition, String supervisorEmail,
+                            String supervisorContact) {}
+
     public record ApplyBody(Long departmentId) {}
 
     public record CheckBody(String companyName, String departmentName) {}
@@ -126,6 +131,30 @@ public class StudentCompanyController {
     }
 
     // ---------------------------------------------------------------------
+    // My Company: kumpanya, department at supervisor ng student
+    // ---------------------------------------------------------------------
+
+    @GetMapping("/mine")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> mine(Authentication authentication) {
+        Student s = current(authentication);
+        if (s == null) return ResponseEntity.status(403).body("Student account not found.");
+        String status = s.getStatus() == null ? "" : s.getStatus();
+
+        Department d = s.getDepartment();
+        if (d == null || d.getCompany() == null) {
+            return ResponseEntity.ok(new MyCompany(false, status, null, null, null, null, null, null,
+                    null, null, null, null));
+        }
+        Company c = d.getCompany();
+        return ResponseEntity.ok(new MyCompany(true, status, c.getName(),
+                c.getNature() == null ? null : c.getNature().getName(),
+                c.getAddress(), c.getLocation(), c.getContactNumber(), deptLabel(d.getName()),
+                d.getSupervisorFullname(), d.getSupervisorPosition(), d.getSupervisorEmail(),
+                d.getSupervisorContactNumber()));
+    }
+
+    // ---------------------------------------------------------------------
     // Apply
     // ---------------------------------------------------------------------
 
@@ -162,7 +191,7 @@ public class StudentCompanyController {
 
         coordinatorNotifier.fromStudent(s, "company_application", "New company application",
                 fullName(s) + " applied to " + d.getCompany().getName() + " – " + deptLabel(d.getName()) + ".",
-                "/coordinator/students?tab=applications");
+                "/coordinator/host-training-establishments?tab=applicants");
 
         return ResponseEntity.ok(new ApplicationRow(a.getId(), d.getId(), d.getCompany().getName(),
                 deptLabel(d.getName()), "pending", null, a.getCreatedAt().toString()));
@@ -185,10 +214,10 @@ public class StudentCompanyController {
     }
 
     // ---------------------------------------------------------------------
-    // Duplicate check (bago magpadala ng request)
+    // Hindi na nakalantad bilang endpoint: ang company na ang nagre-request gamit ang public link.
+    // Duplicate check (dating ginagamit ng student request)
     // ---------------------------------------------------------------------
 
-    @PostMapping("/check")
     @Transactional(readOnly = true)
     public ResponseEntity<?> check(@RequestBody CheckBody body, Authentication authentication) {
         Student s = current(authentication);
@@ -233,7 +262,6 @@ public class StudentCompanyController {
     // Request a new company / department
     // ---------------------------------------------------------------------
 
-    @PostMapping("/requests")
     @Transactional
     public ResponseEntity<?> request(@RequestBody NewRequestBody body, Authentication authentication) {
         Student s = current(authentication);

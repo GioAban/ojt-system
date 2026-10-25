@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, Inbox, X } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
@@ -11,6 +11,10 @@ import type {
 } from "@/types/companyRequest";
 import { notifyCompanyRequestsChanged } from "@/hooks/usePendingCompanyRequests";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import {
+  CompanyRequestLinkCard,
+  type CompanyLinkState,
+} from "@/components/companies/CompanyRequestLinkCard";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,8 +29,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 const BASE = "/coordinator/company-requests";
 
 const CHIP: Record<RequestStatus, string> = {
-  pending: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  approved: "border-emerald-600/30 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400",
+  pending:
+    "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  approved:
+    "border-emerald-600/30 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400",
   declined: "border-destructive/30 bg-destructive/10 text-destructive",
 };
 const LABEL: Record<RequestStatus, string> = {
@@ -49,29 +55,71 @@ function Field({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
   return (
     <div className="min-w-0">
-      <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
       <dd className="break-words text-sm">{value}</dd>
     </div>
   );
 }
 
 interface Props {
+  semesterId: number | null;
   data: CompanyRequestsData | null;
   loading: boolean;
   onChanged: () => Promise<void> | void;
 }
 
-export function RequestsPanel({ data, loading, onChanged }: Props) {
+function byCompany(r: CompanyRequestRow) {
+  return r.source === "company_link";
+}
+
+function whoRequested(r: CompanyRequestRow) {
+  if (byCompany(r)) return "Submitted by the company through your link";
+  if (r.source === "coordinator") return "Added by you";
+  return `Requested by ${studentName(r)}${
+    r.studentNumber
+      ? ` (${r.studentNumber}${r.subjectCode ? ` · ${r.subjectCode}` : ""})`
+      : ""
+  }`;
+}
+
+export function RequestsPanel({ semesterId, data, loading, onChanged }: Props) {
+  const [link, setLink] = useState<CompanyLinkState | null>(null);
+  const [linkFailed, setLinkFailed] = useState(false);
+
+  const loadLink = useCallback(async () => {
+    if (semesterId == null) return;
+    try {
+      const res = await api.get<CompanyLinkState>(`${BASE}/link`, {
+        params: { semesterId },
+      });
+      setLink(res.data);
+      setLinkFailed(false);
+    } catch {
+      setLinkFailed(true);
+    }
+  }, [semesterId]);
+
+  useEffect(() => {
+    setLink(null);
+    setLinkFailed(false);
+    void loadLink();
+  }, [loadLink]);
+
+  useEffect(() => {
+    setLink(null);
+    void loadLink();
+  }, [loadLink]);
+
   const [busyId, setBusyId] = useState<number | null>(null);
   const [approving, setApproving] = useState<CompanyRequestRow | null>(null);
   const [declining, setDeclining] = useState<CompanyRequestRow | null>(null);
   const [reason, setReason] = useState("");
-  const [savingSetting, setSavingSetting] = useState(false);
 
   const requests = data?.requests ?? [];
   const pending = requests.filter((r) => r.status === "pending");
   const shown = pending;
-  const accepting = data?.accepting ?? true;
 
   async function after() {
     await onChanged();
@@ -82,7 +130,9 @@ export function RequestsPanel({ data, loading, onChanged }: Props) {
     setBusyId(r.departmentId);
     try {
       await api.patch(`${BASE}/${r.departmentId}/approve`);
-      notify.success(`${r.companyName} – ${deptLabel(r)} was approved and added to the list.`);
+      notify.success(
+        `${r.companyName} – ${deptLabel(r)} was approved and added to the list.`,
+      );
       setApproving(null);
       await after();
     } catch (err) {
@@ -98,8 +148,14 @@ export function RequestsPanel({ data, loading, onChanged }: Props) {
     if (!text) return;
     setBusyId(declining.departmentId);
     try {
-      await api.patch(`${BASE}/${declining.departmentId}/decline`, { reason: text });
-      notify.success(`The request was declined. ${declining.firstname ?? "The student"} will see your reason.`);
+      await api.patch(`${BASE}/${declining.departmentId}/decline`, {
+        reason: text,
+      });
+      notify.success(
+        declining.studentId
+          ? `The request was declined. ${declining.firstname ?? "The student"} will see your reason.`
+          : "The request was declined.",
+      );
       setDeclining(null);
       setReason("");
       await after();
@@ -110,53 +166,16 @@ export function RequestsPanel({ data, loading, onChanged }: Props) {
     }
   }
 
-  async function toggleAccepting() {
-    setSavingSetting(true);
-    try {
-      await api.patch(`${BASE}/settings`, { accepting: !accepting });
-      notify.success(
-        accepting
-          ? "Students can no longer request new companies."
-          : "Students can request new companies again.",
-      );
-      await onChanged();
-    } catch (err) {
-      notify.error(getErrorMessage(err, "Couldn't update the setting."));
-    } finally {
-      setSavingSetting(false);
-    }
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      <div
-        className={cn(
-          "flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between",
-          !accepting && "border-amber-500/40 bg-amber-500/5",
-        )}
-      >
-        <div>
-          <p className="text-sm font-medium">
-            {accepting
-              ? "Students can request new companies and departments"
-              : "Requests for new companies and departments are closed"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {accepting
-              ? "Approved students who can't find a company in the list can send you its details to validate."
-              : "Students only see the companies already in your list. Pending requests can still be reviewed."}
-          </p>
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          variant={accepting ? "outline" : "default"}
-          disabled={savingSetting || !data}
-          onClick={toggleAccepting}
-        >
-          {accepting ? "Stop accepting requests" : "Accept requests again"}
-        </Button>
-      </div>
+      {semesterId !== null && (
+        <CompanyRequestLinkCard
+          semesterId={semesterId}
+          state={link}
+          failed={linkFailed}
+          onChange={setLink}
+        />
+      )}
 
       <p className="text-sm text-muted-foreground">
         {pending.length === 0
@@ -177,9 +196,7 @@ export function RequestsPanel({ data, loading, onChanged }: Props) {
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
             <Inbox className="h-6 w-6 text-muted-foreground" />
           </span>
-          <p className="text-sm text-muted-foreground">
-            No pending requests.
-          </p>
+          <p className="text-sm text-muted-foreground">No pending requests.</p>
         </div>
       )}
 
@@ -189,12 +206,18 @@ export function RequestsPanel({ data, loading, onChanged }: Props) {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-medium">
-                  {r.companyName} <span className="text-muted-foreground">·</span> {deptLabel(r)}
+                  {r.companyName}{" "}
+                  <span className="text-muted-foreground">·</span>{" "}
+                  {deptLabel(r)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Requested by {studentName(r)}
-                  {r.studentNumber ? ` (${r.studentNumber}${r.subjectCode ? ` · ${r.subjectCode}` : ""})` : ""}
-                  {r.newCompany ? " · new company" : " · new department in an existing company"}
+                  {whoRequested(r)}
+                  {r.newCompany
+                    ? " · new company"
+                    : " · new department in an existing company"}
+                  {byCompany(r) && r.consentAt
+                    ? ` · agreed to the Data Privacy Notice on ${new Date(r.consentAt).toLocaleDateString()}`
+                    : ""}
                 </p>
               </div>
               <span
@@ -209,17 +232,32 @@ export function RequestsPanel({ data, loading, onChanged }: Props) {
 
             <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field label="Address" value={r.address} />
-              <Field label="Contact number" value={r.contactNumber} />
+              <Field label="Company number" value={r.contactNumber} />
               <Field label="Location" value={r.location} />
-              <Field label="Supervisor" value={r.supervisorFullname} />
+              <Field
+                label={byCompany(r) ? "Contact person" : "Supervisor"}
+                value={r.supervisorFullname}
+              />
               <Field label="Position" value={r.supervisorPosition} />
-              <Field label="Supervisor email" value={r.supervisorEmail} />
-              <Field label="Supervisor contact" value={r.supervisorContactNumber} />
+              <Field
+                label={byCompany(r) ? "Contact email" : "Supervisor email"}
+                value={r.supervisorEmail}
+              />
+              <Field
+                label={
+                  byCompany(r) ? "Contact person number" : "Supervisor contact"
+                }
+                value={r.supervisorContactNumber}
+              />
             </dl>
 
             {r.status === "declined" && r.declineReason && (
               <p className="mt-3 rounded-md border border-destructive/20 bg-destructive/5 p-2 text-sm">
-                <span className="text-xs text-muted-foreground">Your reason (private to the student): </span>
+                <span className="text-xs text-muted-foreground">
+                  {r.studentId
+                    ? "Your reason (private to the student): "
+                    : "Your reason (kept in your records): "}
+                </span>
                 {r.declineReason}
               </p>
             )}
@@ -258,9 +296,11 @@ export function RequestsPanel({ data, loading, onChanged }: Props) {
         title="Approve this request?"
         description={
           approving
-            ? `${approving.companyName} – ${deptLabel(approving)} will be added to your list and ${
-                approving.firstname ?? "the student"
-              } will be notified.`
+            ? `${approving.companyName} – ${deptLabel(approving)} will be added to your list${
+                approving.studentId
+                  ? ` and ${approving.firstname ?? "the student"} will be notified`
+                  : ""
+              }.`
             : ""
         }
         confirmLabel="Approve"
@@ -280,7 +320,9 @@ export function RequestsPanel({ data, loading, onChanged }: Props) {
             <DialogTitle>Decline this request?</DialogTitle>
             <DialogDescription>
               {declining
-                ? `${declining.companyName} – ${deptLabel(declining)}. Only ${declining.firstname ?? "the student"} will see your reason.`
+                ? declining.studentId
+                  ? `${declining.companyName} – ${deptLabel(declining)}. Only ${declining.firstname ?? "the student"} will see your reason.`
+                  : `${declining.companyName} – ${deptLabel(declining)}. The company isn't notified, so contact them yourself if needed.`
                 : ""}
             </DialogDescription>
           </DialogHeader>
@@ -289,11 +331,16 @@ export function RequestsPanel({ data, loading, onChanged }: Props) {
             onChange={(e) => setReason(e.target.value)}
             maxLength={1000}
             rows={4}
-            placeholder="Reason for the student (e.g. we already have this company, please pick it from the list)"
+            placeholder="Reason (e.g. we already have this company, or not related to our program)"
             className="w-full rounded-md border bg-background p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeclining(null)} disabled={busyId !== null}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeclining(null)}
+              disabled={busyId !== null}
+            >
               Cancel
             </Button>
             <Button

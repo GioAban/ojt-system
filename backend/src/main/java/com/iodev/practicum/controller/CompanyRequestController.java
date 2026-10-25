@@ -87,7 +87,9 @@ public class CompanyRequestController {
                     s == null ? null : s.getFirstname(), s == null ? null : s.getLastname(),
                     s == null ? null : s.getMiddleInitial(), s == null ? null : s.getSubjectCode(),
                     d.getDeclineReason(),
-                    d.getReviewedAt() == null ? null : d.getReviewedAt().toString()));
+                    d.getReviewedAt() == null ? null : d.getReviewedAt().toString(),
+                    sourceOf(d),
+                    d.getPrivacyConsentAt() == null ? null : d.getPrivacyConsentAt().toString()));
         }
 
         return ResponseEntity.ok(new RequestsResponse(
@@ -164,7 +166,11 @@ public class CompanyRequestController {
         if (problem != null) return problem;
 
         String reason = request == null || request.reason() == null ? "" : request.reason().trim();
-        if (reason.isEmpty()) return bad("Please write the reason for the student.");
+        if (reason.isEmpty()) {
+            return bad(d.getRequestedByStudentId() == null
+                    ? "Please write the reason. It is kept in your records; the company isn't notified."
+                    : "Please write the reason for the student.");
+        }
         if (reason.length() > 1000) return bad("The reason is too long (max 1000 characters).");
 
         d.setStatus("declined");
@@ -179,6 +185,12 @@ public class CompanyRequestController {
     }
 
     // ---------------------------------------------------------------------
+
+    /** student | company_link | coordinator */
+    private static String sourceOf(Department d) {
+        if (d.getRequestSource() != null && !d.getRequestSource().isBlank()) return d.getRequestSource();
+        return d.getRequestedByStudentId() != null ? "student" : "coordinator";
+    }
 
     private List<Department> requestedDepartments(List<Company> companies) {
         if (companies.isEmpty()) return new ArrayList<>();

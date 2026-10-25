@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Clock, Layers, Plus, Search, Users } from "lucide-react";
 import api from "@/lib/api";
 import { isApproved } from "@/lib/company";
@@ -16,6 +16,7 @@ import type {
 import type { CompanyRequestsData } from "@/types/companyRequest";
 import { CountBadge } from "@/components/companies/CountBadge";
 import { RequestsPanel } from "@/components/companies/RequestsPanel";
+import { ApplicationsTab } from "@/components/students/ApplicationsTab";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -35,7 +36,7 @@ import {
 } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type Tab = "companies" | "listing" | "requests";
+type Tab = "companies" | "listing" | "requests" | "applicants";
 type StatusFilter = "active" | "archived" | "all";
 type ApprovalFilter = "all" | "approved" | "pending";
 type SlotsFilter = "all" | "open" | "full";
@@ -50,7 +51,8 @@ interface ConfirmTarget {
 const TABS: { value: Tab; label: string }[] = [
   { value: "companies", label: "Companies" },
   { value: "listing", label: "Company & department list" },
-  { value: "requests", label: "Requests" },
+  { value: "requests", label: "Company requests" },
+  { value: "applicants", label: "Student applicants" },
 ];
 
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
@@ -91,7 +93,36 @@ export default function HostTraining() {
   );
   const requestsPending = requestsSection.data?.pendingCount ?? 0;
 
-  const [tab, setTab] = useState<Tab>("companies");
+  // Awtomatikong kunin ang bagong hiling (hal. galing sa link ng company)
+  const refreshRequests = useRef(requestsSection.refresh);
+  refreshRequests.current = requestsSection.refresh;
+  useEffect(() => {
+    if (semesterId === null) return;
+    const run = () => {
+      if (document.visibilityState === "visible") void refreshRequests.current();
+    };
+    const id = window.setInterval(run, 30_000);
+    window.addEventListener("focus", run);
+    document.addEventListener("visibilitychange", run);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", run);
+      document.removeEventListener("visibilitychange", run);
+    };
+  }, [semesterId]);
+
+  const [appCount, setAppCount] = useState(0);
+  const [tab, setTab] = useState<Tab>(() => {
+    try {
+      const t = new URLSearchParams(window.location.search).get("tab");
+      if (t === "requests") return "requests";
+      return t === "applicants" || t === "applications"
+        ? "applicants"
+        : "companies";
+    } catch {
+      return "companies";
+    }
+  });
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("active");
   const [natureId, setNatureId] = useState("");
@@ -129,7 +160,9 @@ export default function HostTraining() {
     if (hiddenDepartmentIds.size === 0) return all;
     const result: CompanyItem[] = [];
     for (const c of all) {
-      const visible = c.departments.filter((d) => !hiddenDepartmentIds.has(d.id));
+      const visible = c.departments.filter(
+        (d) => !hiddenDepartmentIds.has(d.id),
+      );
       // Company na puro hiling pa lang ng student ang laman: nasa Requests tab pa
       if (c.departments.length > 0 && visible.length === 0) continue;
       result.push({ ...c, departments: visible });
@@ -372,7 +405,11 @@ export default function HostTraining() {
               icon={Clock}
               label="Pending approval"
               value={String(pendingCount)}
-              hint={pendingCount > 0 ? "See the Requests tab" : "All reviewed"}
+              hint={
+                pendingCount > 0
+                  ? "See the Company requests tab"
+                  : "All reviewed"
+              }
               warn={pendingCount > 0}
             />
           </div>
@@ -397,223 +434,230 @@ export default function HostTraining() {
                 {t.value === "requests" && (
                   <CountBadge count={requestsPending} className="ml-2" />
                 )}
+                {t.value === "applicants" && (
+                  <CountBadge count={appCount} className="ml-2" />
+                )}
               </button>
             ))}
           </nav>
 
-          {tab !== "requests" && (
-          <>
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search company, department, supervisor..."
-                  className="pl-9"
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setPage(1);
-                  }}
-                />
+          {tab !== "requests" && tab !== "applicants" && (
+            <>
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search company, department, supervisor..."
+                      className="pl-9"
+                      value={search}
+                      onChange={(e) => {
+                        setSearch(e.target.value);
+                        setPage(1);
+                      }}
+                    />
+                  </div>
+
+                  <NativeSelect
+                    aria-label="Filter by nature"
+                    value={natureId}
+                    onChange={(e) => {
+                      setNatureId(e.target.value);
+                      setPage(1);
+                    }}
+                  >
+                    <NativeSelectOption value="">
+                      All natures
+                    </NativeSelectOption>
+                    {natures.map((n) => (
+                      <NativeSelectOption key={n.id} value={String(n.id)}>
+                        {n.name}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+
+                  {tab === "listing" && (
+                    <>
+                      <NativeSelect
+                        aria-label="Filter by approval"
+                        value={approval}
+                        onChange={(e) => {
+                          setApproval(e.target.value as ApprovalFilter);
+                          setPage(1);
+                        }}
+                      >
+                        <NativeSelectOption value="all">
+                          Any approval
+                        </NativeSelectOption>
+                        <NativeSelectOption value="approved">
+                          Approved
+                        </NativeSelectOption>
+                        <NativeSelectOption value="pending">
+                          Pending
+                        </NativeSelectOption>
+                      </NativeSelect>
+
+                      <NativeSelect
+                        aria-label="Filter by slots"
+                        value={slotsFilter}
+                        onChange={(e) => {
+                          setSlotsFilter(e.target.value as SlotsFilter);
+                          setPage(1);
+                        }}
+                      >
+                        <NativeSelectOption value="all">
+                          Any slots
+                        </NativeSelectOption>
+                        <NativeSelectOption value="open">
+                          With open slots
+                        </NativeSelectOption>
+                        <NativeSelectOption value="full">
+                          Full
+                        </NativeSelectOption>
+                      </NativeSelect>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {STATUS_OPTIONS.map((o) => (
+                    <Button
+                      key={o.value}
+                      type="button"
+                      size="sm"
+                      variant={status === o.value ? "default" : "outline"}
+                      onClick={() => {
+                        setStatus(o.value);
+                        setPage(1);
+                      }}
+                    >
+                      {o.label}
+                    </Button>
+                  ))}
+                </div>
               </div>
 
-              <NativeSelect
-                aria-label="Filter by nature"
-                value={natureId}
-                onChange={(e) => {
-                  setNatureId(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <NativeSelectOption value="">All natures</NativeSelectOption>
-                {natures.map((n) => (
-                  <NativeSelectOption key={n.id} value={String(n.id)}>
-                    {n.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+              {loading && (
+                <div className="flex flex-col gap-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                  ))}
+                </div>
+              )}
 
-              {tab === "listing" && (
+              {!loading && !error && companies.length === 0 && (
+                <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed py-20 text-center">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+                    <Building2 className="h-7 w-7 text-muted-foreground" />
+                  </span>
+                  <div>
+                    <p className="font-medium">
+                      No host training establishments yet
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Add a company and its departments, then place your
+                      students in them.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => setCompanyForm({ company: null })}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add the first company
+                  </Button>
+                </div>
+              )}
+
+              {!loading && !error && companies.length > 0 && total === 0 && (
+                <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Nothing matches your filters.
+                  </p>
+                  {filtersActive && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={resetFilters}
+                    >
+                      Reset filters
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {!loading && total > 0 && tab === "companies" && (
                 <>
-                  <NativeSelect
-                    aria-label="Filter by approval"
-                    value={approval}
-                    onChange={(e) => {
-                      setApproval(e.target.value as ApprovalFilter);
-                      setPage(1);
-                    }}
-                  >
-                    <NativeSelectOption value="all">
-                      Any approval
-                    </NativeSelectOption>
-                    <NativeSelectOption value="approved">
-                      Approved
-                    </NativeSelectOption>
-                    <NativeSelectOption value="pending">
-                      Pending
-                    </NativeSelectOption>
-                  </NativeSelect>
+                  <div className="flex flex-col gap-3">
+                    {companyPage.map((c) => (
+                      <CompanyCard
+                        key={c.id}
+                        company={c}
+                        onEditCompany={() => setCompanyForm({ company: c })}
+                        onArchiveCompany={() => askCompany(c)}
+                        onAddDepartment={() =>
+                          setDeptForm({ company: c, department: null })
+                        }
+                        onEditDepartment={(d) =>
+                          setDeptForm({ company: c, department: d })
+                        }
+                        onToggleApproval={(d) => void toggleApproval(c, d)}
+                        onArchiveDepartment={(d) => askDepartment(c, d)}
+                      />
+                    ))}
+                  </div>
 
-                  <NativeSelect
-                    aria-label="Filter by slots"
-                    value={slotsFilter}
-                    onChange={(e) => {
-                      setSlotsFilter(e.target.value as SlotsFilter);
-                      setPage(1);
-                    }}
-                  >
-                    <NativeSelectOption value="all">
-                      Any slots
-                    </NativeSelectOption>
-                    <NativeSelectOption value="open">
-                      With open slots
-                    </NativeSelectOption>
-                    <NativeSelectOption value="full">Full</NativeSelectOption>
-                  </NativeSelect>
+                  <div className="mt-3 rounded-xl border bg-card">
+                    <DataTablePagination
+                      page={currentPage}
+                      pageSize={pageSize}
+                      total={total}
+                      pageSizeOptions={[5, 10, 20]}
+                      onPageChange={setPage}
+                      onPageSizeChange={(size) => {
+                        setPageSize(size);
+                        setPage(1);
+                      }}
+                    />
+                  </div>
                 </>
               )}
-            </div>
 
-            <div className="flex items-center gap-1">
-              {STATUS_OPTIONS.map((o) => (
-                <Button
-                  key={o.value}
-                  type="button"
-                  size="sm"
-                  variant={status === o.value ? "default" : "outline"}
-                  onClick={() => {
-                    setStatus(o.value);
-                    setPage(1);
-                  }}
-                >
-                  {o.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {loading && (
-            <div className="flex flex-col gap-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full rounded-xl" />
-              ))}
-            </div>
-          )}
-
-          {!loading && !error && companies.length === 0 && (
-            <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed py-20 text-center">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-                <Building2 className="h-7 w-7 text-muted-foreground" />
-              </span>
-              <div>
-                <p className="font-medium">
-                  No host training establishments yet
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Add a company and its departments, then place your students in
-                  them.
-                </p>
-              </div>
-              <Button
-                type="button"
-                onClick={() => setCompanyForm({ company: null })}
-              >
-                <Plus className="h-4 w-4" />
-                Add the first company
-              </Button>
-            </div>
-          )}
-
-          {!loading && !error && companies.length > 0 && total === 0 && (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center">
-              <p className="text-sm text-muted-foreground">
-                Nothing matches your filters.
-              </p>
-              {filtersActive && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={resetFilters}
-                >
-                  Reset filters
-                </Button>
-              )}
-            </div>
-          )}
-
-          {!loading && total > 0 && tab === "companies" && (
-            <>
-              <div className="flex flex-col gap-3">
-                {companyPage.map((c) => (
-                  <CompanyCard
-                    key={c.id}
-                    company={c}
-                    onEditCompany={() => setCompanyForm({ company: c })}
-                    onArchiveCompany={() => askCompany(c)}
-                    onAddDepartment={() =>
+              {!loading && total > 0 && tab === "listing" && (
+                <div className="isolate rounded-xl border bg-card">
+                  <CompanyListing
+                    rows={rowPage}
+                    offset={start}
+                    onEditCompany={(c) => setCompanyForm({ company: c })}
+                    onArchiveCompany={askCompany}
+                    onAddDepartment={(c) =>
                       setDeptForm({ company: c, department: null })
                     }
-                    onEditDepartment={(d) =>
+                    onEditDepartment={(c, d) =>
                       setDeptForm({ company: c, department: d })
                     }
-                    onToggleApproval={(d) => void toggleApproval(c, d)}
-                    onArchiveDepartment={(d) => askDepartment(c, d)}
+                    onToggleApproval={(c, d) => void toggleApproval(c, d)}
+                    onArchiveDepartment={askDepartment}
+                    onManageMoa={(c, d) =>
+                      setMoaTarget({ companyId: c.id, departmentId: d.id })
+                    }
                   />
-                ))}
-              </div>
 
-              <div className="mt-3 rounded-xl border bg-card">
-                <DataTablePagination
-                  page={currentPage}
-                  pageSize={pageSize}
-                  total={total}
-                  pageSizeOptions={[5, 10, 20]}
-                  onPageChange={setPage}
-                  onPageSizeChange={(size) => {
-                    setPageSize(size);
-                    setPage(1);
-                  }}
-                />
-              </div>
+                  <DataTablePagination
+                    page={currentPage}
+                    pageSize={pageSize}
+                    total={total}
+                    pageSizeOptions={[10, 20, 50]}
+                    onPageChange={setPage}
+                    onPageSizeChange={(size) => {
+                      setPageSize(size);
+                      setPage(1);
+                    }}
+                  />
+                </div>
+              )}
             </>
-          )}
-
-          {!loading && total > 0 && tab === "listing" && (
-            <div className="isolate rounded-xl border bg-card">
-              <CompanyListing
-                rows={rowPage}
-                offset={start}
-                onEditCompany={(c) => setCompanyForm({ company: c })}
-                onArchiveCompany={askCompany}
-                onAddDepartment={(c) =>
-                  setDeptForm({ company: c, department: null })
-                }
-                onEditDepartment={(c, d) =>
-                  setDeptForm({ company: c, department: d })
-                }
-                onToggleApproval={(c, d) => void toggleApproval(c, d)}
-                onArchiveDepartment={askDepartment}
-                onManageMoa={(c, d) =>
-                  setMoaTarget({ companyId: c.id, departmentId: d.id })
-                }
-              />
-
-              <DataTablePagination
-                page={currentPage}
-                pageSize={pageSize}
-                total={total}
-                pageSizeOptions={[10, 20, 50]}
-                onPageChange={setPage}
-                onPageSizeChange={(size) => {
-                  setPageSize(size);
-                  setPage(1);
-                }}
-              />
-            </div>
-          )}
-          </>
           )}
 
           {tab === "requests" && (
@@ -625,6 +669,14 @@ export default function HostTraining() {
               }}
             />
           )}
+          <div className={tab === "applicants" ? undefined : "hidden"}>
+            <ApplicationsTab
+              semesterId={semesterId}
+              visible={tab === "applicants"}
+              onPendingChange={setAppCount}
+              onChanged={() => void refresh()}
+            />
+          </div>
         </>
       )}
 

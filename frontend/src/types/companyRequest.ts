@@ -24,6 +24,10 @@ export interface CompanyRequestRow {
   subjectCode: string | null;
   declineReason: string | null;
   reviewedAt: string | null;
+  /** student | company_link | coordinator */
+  source: string;
+  /** Kailan pumayag ang company sa Data Privacy Notice (company_link lang) */
+  consentAt: string | null;
 }
 
 export interface CompanyRequestsData {
