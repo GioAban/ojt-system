@@ -13,8 +13,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.core.ResponseInputStream;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -60,12 +58,12 @@ public class SubmissionFileAccess {
             return ResponseEntity.status(503).body("File storage isn't set up yet.");
         }
 
-        ResponseInputStream<GetObjectResponse> in;
+        RequirementStorage.Opened in;
         try {
             in = storage.open(f.getPath());
         } catch (RuntimeException e) {
             org.slf4j.LoggerFactory.getLogger(SubmissionFileAccess.class)
-                    .error("Couldn't open S3 object {}", f.getPath(), e);
+                    .error("Couldn't open stored file {}", f.getPath(), e);
             return ResponseEntity.status(404).body("File not found in storage.");
         }
 
@@ -74,8 +72,7 @@ public class SubmissionFileAccess {
                 .contentType(type)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.inline().filename(f.getName(), StandardCharsets.UTF_8).build().toString());
-        Long length = in.response().contentLength();
-        if (length != null) ok.contentLength(length);
-        return ok.body(new InputStreamResource(in));
+        if (in.length() != null) ok.contentLength(in.length());
+        return ok.body(new InputStreamResource(in.stream()));
     }
 }
