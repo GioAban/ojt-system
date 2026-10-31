@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { CollegeFormDialog } from "@/components/colleges/CollegeFormDialog";
+import { CollegeLogo } from "@/components/colleges/CollegeLogo";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -286,9 +287,12 @@ export default function Colleges() {
               pageRows.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{c.name}</span>
-                      <Badge variant="outline">{c.abbreviation}</Badge>
+                    <div className="flex items-center gap-3">
+                      <CollegeLogo path={c.logo} label={c.abbreviation} />
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{c.name}</span>
+                        <Badge variant="outline">{c.abbreviation}</Badge>
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">

@@ -143,8 +143,15 @@ public class CollegeController {
     }
 
     private CollegeResponse toResponse(College c, long programsCount) {
+        return response(c, programsCount);
+    }
+
+    /** Ang logo ay ibinabalik bilang landas ng pampublikong larawan (may ?v= para sa cache), o null kung wala */
+    static CollegeResponse response(College c, long programsCount) {
+        String logo = c.getLogo() == null || c.getLogo().isBlank() ? null
+                : "/public/colleges/" + c.getId() + "/logo?v=" + (c.getUpdatedAt() == null ? 0 : c.getUpdatedAt().getTime());
         return new CollegeResponse(
-                c.getId(), c.getName(), c.getAbbreviation(), c.getDean(), c.getLogo(),
+                c.getId(), c.getName(), c.getAbbreviation(), c.getDean(), logo,
                 c.getIsArchived(), programsCount, c.getCreatedAt(), c.getUpdatedAt());
     }
 
