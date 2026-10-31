@@ -13,6 +13,8 @@ import { SCOPE_LABEL, TYPE_LABEL, formatDue, formatSize, isPastDue, normType } f
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PrivateComments } from "@/components/PrivateComments";
+import { WeeklyReportEditor } from "@/components/weekly/WeeklyReportEditor";
+import { DtrEditor } from "@/components/dtr/DtrEditor";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -229,6 +231,21 @@ export default function WorkPage() {
                   <Download className="h-4 w-4 text-muted-foreground" />
                 </a>
               </>
+            )}
+
+            {data.scope === "weekly" && id && (
+              <div className="mt-6 border-t pt-5">
+                <WeeklyReportEditor refId={id} />
+              </div>
+            )}
+
+            {data.scope === "dtr" && id && (
+              <div className="mt-6 border-t pt-5">
+                <DtrEditor
+                  refId={id}
+                  onHoursChange={(h) => { if (data.canEdit && h > 0) setHours(String(h)); }}
+                />
+              </div>
             )}
           </section>
 
