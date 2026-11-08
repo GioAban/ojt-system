@@ -18,6 +18,8 @@ interface Props {
   /** Sino ang kausap: ipinapakita sa paliwanag */
   otherParty: string;
   className?: string;
+  /** Mababasa lang ang usapan, hindi makakapagpadala */
+  readOnly?: boolean;
 }
 
 /** Private na usapan ng student at coordinator tungkol sa isang isinumite */
@@ -28,6 +30,7 @@ export function PrivateComments({
   postExtra,
   otherParty,
   className,
+  readOnly = false,
 }: Props) {
   const [items, setItems] = useState<CommentItem[] | null>(null);
   const [error, setError] = useState("");
@@ -119,7 +122,7 @@ export function PrivateComments({
               >
                 {c.body}
               </div>
-              <span className="mt-0.5 px-1 text-[11px] text-muted-foreground">
+              <span className="mt-0.5 px-1 text-xs text-muted-foreground">
                 {c.mine ? "You" : c.authorName || otherParty} ·{" "}
                 {timeAgo(c.createdAt)}
               </span>
@@ -129,6 +132,11 @@ export function PrivateComments({
         </ul>
       )}
 
+      {readOnly ? (
+        <p className="text-xs text-muted-foreground">
+          You can't add comments while this is closed.
+        </p>
+      ) : (
       <div className="flex items-end gap-2">
         <textarea
           value={text}
@@ -158,6 +166,7 @@ export function PrivateComments({
           )}
         </Button>
       </div>
+      )}
     </section>
   );
 }

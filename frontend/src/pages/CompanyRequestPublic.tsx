@@ -163,8 +163,8 @@ export default function CompanyRequestPublic() {
   }
 
   return (
-    <main className="flex min-h-screen items-start justify-center bg-muted/30 p-4 sm:items-center">
-      <div className="w-full max-w-xl rounded-xl border bg-card p-6 shadow-sm">
+    <main className="flex min-h-dvh items-start justify-center bg-muted/30 px-4 py-6 sm:items-center sm:p-4">
+      <div className="w-full max-w-xl rounded-xl border bg-card p-5 shadow-sm sm:p-6">
         {phase === "checking" && <p className="text-center text-sm text-muted-foreground">Checking the link...</p>}
 
         {info && (phase === "open" || phase === "closed" || phase === "expired" || phase === "done") && (
@@ -277,14 +277,14 @@ export default function CompanyRequestPublic() {
                     value={d.name}
                     maxLength={255}
                     onChange={(e) => setDept(i, { name: e.target.value })}
-                    className="flex-1"
+                    className="min-w-0 flex-1"
                   />
                   <Input
                     aria-label={`Department ${i + 1} slots`}
                     inputMode="numeric"
                     value={d.slots}
                     onChange={(e) => setDept(i, { slots: e.target.value })}
-                    className="w-20"
+                    className="w-16 shrink-0 sm:w-20"
                     title="Number of trainees"
                   />
                   {departments.length > 1 && (
@@ -329,11 +329,16 @@ export default function CompanyRequestPublic() {
                 If you give details of another person (the contact person), you confirm that they know and agree that
                 you are sharing them.
               </p>
+              <p className="mt-2">
+                <a href="/privacy" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">
+                  Read the full Privacy Notice
+                </a>
+              </p>
             </section>
 
             <div className="flex flex-col gap-1">
               <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" className="mt-1" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+                <input type="checkbox" className="mt-0.5 size-4 shrink-0 pointer-coarse:size-5" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
                 <span>
                   I have read the Data Privacy Notice and I agree to the collection and use of this information for this
                   purpose. <span className="text-destructive">*</span>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarClock, CheckCircle2, ClipboardList, FileText, Info, Lock, Paperclip } from "lucide-react";
 import api from "@/lib/api";
@@ -11,7 +11,7 @@ import { TabBar, type TabDef } from "@/components/TabBar";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type MainTab = "INITIAL" | "PRE_DEPLOYMENT" | "POST_DEPLOYMENT";
-type PreTab = "requirement" | "weekly" | "dtr";
+type PreTab = "requirement" | "weekly" | "dtr" | "midterm" | "final";
 
 /** Kulay lang ang may kailangan pang gawin. Kapag may nai-attach na, walang kulay. */
 const BANNER: Record<WorkState, string> = {
@@ -25,7 +25,7 @@ const BANNER: Record<WorkState, string> = {
 
 const STATUS_NOTE: Record<string, string> = {
   "for approval":
-    "Your coordinator hasn't approved you yet. You can already work on the Initial requirements. Pre-Deployment and Post-Deployment will show up once you're approved.",
+    "Your coordinator hasn't approved you yet. You can already work on the Initial requirements. The rest of Pre-Deployment and Post-Deployment will show up once you're approved.",
   approved:
     "You're approved! Apply to a company in the Companies tab. Weekly Report, DTR and Post-Deployment open once you're deployed.",
   deployed: "You're deployed. Keep up with your requirements, weekly reports and DTR.",
@@ -73,7 +73,7 @@ function WorkCardView({ c }: { c: WorkCard }) {
     >
       <div className={cn("flex h-16 items-center justify-between px-4", BANNER[state])}>
         <FileText className="h-6 w-6" />
-        {done && <CheckCircle2 className="h-5 w-5" />}
+        {c.closed ? <Lock className="h-5 w-5" aria-label="Closed" /> : done && <CheckCircle2 className="h-5 w-5" />}
       </div>
       <div className="flex flex-1 flex-col gap-2 p-4">
         <p className="line-clamp-2 font-medium group-hover:underline">{c.title}</p>
@@ -136,20 +136,51 @@ function CardGrid({ items, empty }: { items: WorkCard[]; empty: string }) {
   );
 }
 
+/** Laman ng tab ng Midterm o Final Evaluation */
+function EvaluationTab({ card }: { card: WorkCard | undefined }) {
+  if (card && !card.closed) return <CardGrid items={[card]} empty="" />;
+  const hasWork = card !== undefined && !card.locked;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-14 text-center">
+        <Lock className="h-8 w-8 text-muted-foreground" />
+        <p className="max-w-sm px-4 text-sm text-muted-foreground">
+          Not open yet. Your coordinator will open this when it is time.
+          {hasWork && " Your work is saved below. You can view it, but you can't change it for now."}
+        </p>
+      </div>
+      {hasWork && <CardGrid items={[card]} empty="" />}
+    </div>
+  );
+}
+
 export default function StudentHome() {
   const [data, setData] = useState<StudentHomeData | null>(null);
   const [error, setError] = useState("");
   const [main, setMain] = useState<MainTab>(() =>
     loadTab<MainTab>("home_main_tab", ["INITIAL", "PRE_DEPLOYMENT", "POST_DEPLOYMENT"], "INITIAL"),
   );
-  const [pre, setPre] = useState<PreTab>(() => loadTab<PreTab>("home_pre_tab", ["requirement", "weekly", "dtr"], "requirement"));
+  const [pre, setPre] = useState<PreTab>(() => loadTab<PreTab>("home_pre_tab", ["requirement", "weekly", "dtr", "midterm", "final"], "requirement"));
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api
       .get<StudentHomeData>("/student/requirements")
-      .then((res) => setData(res.data))
+      .then((res) => {
+        setData(res.data);
+        setError("");
+      })
       .catch((err) => setError(getErrorMessage(err, "Failed to load your requirements.")));
   }, []);
+
+  // Pati pagbalik sa tab ng browser, para lumabas agad ang bagong bukas na evaluation
+  useEffect(() => {
+    load();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [load]);
 
   const status = data?.studentStatus?.trim() || "For Approval";
   const note = STATUS_NOTE[status.toLowerCase()];
@@ -158,8 +189,11 @@ export default function StudentHome() {
 
   const groups = useMemo(() => {
     const items = data?.items ?? [];
-    const req = (t: string) => items.filter((c) => c.scope === "requirement" && normType(c.type) === t);
+    // Ang mga evaluation ay may sariling tab, kaya hindi kasama sa listahan ng requirements
+    const req = (t: string) => items.filter((c) => c.scope === "requirement" && !c.systemKey && normType(c.type) === t);
     return {
+      midterm: items.find((c) => c.systemKey === "MIDTERM_EVALUATION"),
+      final: items.find((c) => c.systemKey === "FINAL_EVALUATION"),
       initial: req("INITIAL"),
       preReq: req("PRE_DEPLOYMENT"),
       post: req("POST_DEPLOYMENT"),
@@ -168,15 +202,26 @@ export default function StudentHome() {
     };
   }, [data]);
 
+  const evaluations = [groups.midterm, groups.final].filter((c): c is WorkCard => c !== undefined);
+
   const mainTabs: TabDef<MainTab>[] = [
     { key: "INITIAL", label: "Initial", count: pendingCount(groups.initial) },
-    ...(approved
+    // Ang hindi pa approved ay may Midterm at Final Evaluation lang dito
+    ...(approved || evaluations.length > 0
       ? ([
           {
             key: "PRE_DEPLOYMENT",
             label: "Pre-Deployment",
-            count: pendingCount(groups.preReq) + pendingCount(groups.weekly) + pendingCount(groups.dtr),
+            count:
+              pendingCount(groups.preReq) +
+              pendingCount(groups.weekly) +
+              pendingCount(groups.dtr) +
+              pendingCount(evaluations),
           },
+        ] as TabDef<MainTab>[])
+      : []),
+    ...(approved
+      ? ([
           {
             key: "POST_DEPLOYMENT",
             label: "Post-Deployment",
@@ -189,17 +234,35 @@ export default function StudentHome() {
   const activeMain: MainTab = mainTabs.some((t) => t.key === main) ? main : "INITIAL";
 
   const preTabs: TabDef<PreTab>[] = [
-    { key: "requirement", label: "Requirements", count: pendingCount(groups.preReq) },
-    { key: "weekly", label: "Weekly Report", count: pendingCount(groups.weekly), locked: !deployed },
-    { key: "dtr", label: "DTR", count: pendingCount(groups.dtr), locked: !deployed },
+    ...(approved
+      ? ([
+          { key: "requirement", label: "Requirements", count: pendingCount(groups.preReq) },
+          { key: "weekly", label: "Weekly Report", count: pendingCount(groups.weekly), locked: !deployed },
+          { key: "dtr", label: "DTR", count: pendingCount(groups.dtr), locked: !deployed },
+        ] as TabDef<PreTab>[])
+      : []),
+    {
+      key: "midterm",
+      label: "Midterm Evaluation",
+      count: pendingCount(groups.midterm ? [groups.midterm] : []),
+      locked: !groups.midterm || groups.midterm.closed,
+    },
+    {
+      key: "final",
+      label: "Final Evaluation",
+      count: pendingCount(groups.final ? [groups.final] : []),
+      locked: !groups.final || groups.final.closed,
+    },
   ];
+  // Kung wala ang naka-save na tab para sa student na ito, ang una ang bubuksan
+  const activePre: PreTab = preTabs.some((t) => t.key === pre) ? pre : preTabs[0].key;
 
   const name = localStorage.getItem("fullname");
 
   return (
     <DashboardLayout>
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">Welcome{name ? `, ${name}` : ""}!</h1>
+        <h1 className="min-w-0 break-words text-xl font-bold tracking-tight sm:text-2xl">Welcome{name ? `, ${name}` : ""}!</h1>
         {data && (
           <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-medium", statusTone(status))}>{status}</span>
         )}
@@ -213,7 +276,7 @@ export default function StudentHome() {
         </div>
       )}
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {!data && !error && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -243,18 +306,20 @@ export default function StudentHome() {
                 size="sm"
                 label="Pre-deployment sections"
                 tabs={preTabs}
-                value={pre}
+                value={activePre}
                 onChange={(k) => {
                   setPre(k);
                   saveTab("home_pre_tab", k);
                 }}
               />
-              {pre !== "requirement" && !deployed ? (
-                <LockedNotice what={pre === "weekly" ? "Weekly Report" : "DTR"} />
+              {activePre === "midterm" || activePre === "final" ? (
+                <EvaluationTab card={activePre === "midterm" ? groups.midterm : groups.final} />
+              ) : activePre !== "requirement" && !deployed ? (
+                <LockedNotice what={activePre === "weekly" ? "Weekly Report" : "DTR"} />
               ) : (
                 <CardGrid
-                  items={pre === "requirement" ? groups.preReq : pre === "weekly" ? groups.weekly : groups.dtr}
-                  empty={EMPTY_TEXT[pre]}
+                  items={activePre === "requirement" ? groups.preReq : activePre === "weekly" ? groups.weekly : groups.dtr}
+                  empty={EMPTY_TEXT[activePre]}
                 />
               )}
             </>

@@ -23,6 +23,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -245,8 +246,8 @@ export function RequirementFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <DialogContent size="2xl">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader>
             <DialogTitle>
               {isEdit ? "Edit" : "Create"} {NOUN[kind]}
@@ -258,115 +259,117 @@ export function RequirementFormDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {kind === "document" && (
-            <>
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Type</span>
-                <Badge variant="secondary">{TYPE_LABELS[type]}</Badge>
-              </div>
+          <DialogBody className="flex flex-col gap-4">
+            {kind === "document" && (
+              <>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Type</span>
+                  <Badge variant="secondary">{TYPE_LABELS[type]}</Badge>
+                </div>
 
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="req-title">Title</Label>
-                <Input
-                  id="req-title"
-                  maxLength={255}
-                  placeholder="e.g. Barangay Clearance"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  autoFocus
-                />
-              </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="req-title">Title</Label>
+                  <Input
+                    id="req-title"
+                    maxLength={255}
+                    placeholder="e.g. Barangay Clearance"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    autoFocus
+                  />
+                </div>
 
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="req-instructions">
-                  Instructions{" "}
-                  <span className="text-muted-foreground">(optional)</span>
-                </Label>
-                <Textarea
-                  id="req-instructions"
-                  rows={5}
-                  maxLength={5000}
-                  placeholder="Tell students what to submit and how."
-                  value={instructions}
-                  onChange={(e) => setInstructions(e.target.value)}
-                />
-              </div>
-            </>
-          )}
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="req-instructions">
+                    Instructions{" "}
+                    <span className="text-muted-foreground">(optional)</span>
+                  </Label>
+                  <Textarea
+                    id="req-instructions"
+                    rows={5}
+                    maxLength={5000}
+                    placeholder="Tell students what to submit and how."
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
 
-          {kind === "weekly" && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="req-from">From</Label>
-                <Input
-                  id="req-from"
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => handleFromChange(e.target.value)}
-                  autoFocus
-                />
+            {kind === "weekly" && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="req-from">From</Label>
+                  <Input
+                    id="req-from"
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => handleFromChange(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="req-to">To</Label>
+                  <Input
+                    id="req-to"
+                    type="date"
+                    min={dateFrom || undefined}
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="req-to">To</Label>
-                <Input
-                  id="req-to"
-                  type="date"
-                  min={dateFrom || undefined}
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                />
+            )}
+
+            {kind === "dtr" && (
+              <div className="flex flex-col gap-2 [&>div]:w-full">
+                <Label htmlFor="req-month">Month</Label>
+                <NativeSelect
+                  id="req-month"
+                  className="w-full"
+                  value={monthName}
+                  onChange={(e) => setMonthName(e.target.value)}
+                >
+                  <NativeSelectOption value="">Select a month</NativeSelectOption>
+                  {MONTHS.map((m) => {
+                    const taken = existingMonths.includes(m) && m !== dtr?.month;
+                    return (
+                      <NativeSelectOption key={m} value={m} disabled={taken}>
+                        {m}
+                        {taken ? " (already added)" : ""}
+                      </NativeSelectOption>
+                    );
+                  })}
+                </NativeSelect>
               </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="req-due">
+                Due date <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="req-due"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
             </div>
-          )}
 
-          {kind === "dtr" && (
-            <div className="flex flex-col gap-2 [&>div]:w-full">
-              <Label htmlFor="req-month">Month</Label>
-              <NativeSelect
-                id="req-month"
-                className="w-full"
-                value={monthName}
-                onChange={(e) => setMonthName(e.target.value)}
-              >
-                <NativeSelectOption value="">Select a month</NativeSelectOption>
-                {MONTHS.map((m) => {
-                  const taken = existingMonths.includes(m) && m !== dtr?.month;
-                  return (
-                    <NativeSelectOption key={m} value={m} disabled={taken}>
-                      {m}
-                      {taken ? " (already added)" : ""}
-                    </NativeSelectOption>
-                  );
-                })}
-              </NativeSelect>
-            </div>
-          )}
+            {kind === "document" && (
+              <AttachmentPicker
+                existing={visibleExisting}
+                files={files}
+                links={links}
+                onFilesChange={setFiles}
+                onLinksChange={setLinks}
+                onRemoveExisting={(id) => setRemovedIds((prev) => [...prev, id])}
+                onProblem={setError}
+              />
+            )}
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="req-due">
-              Due date <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <Input
-              id="req-due"
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
-          </div>
-
-          {kind === "document" && (
-            <AttachmentPicker
-              existing={visibleExisting}
-              files={files}
-              links={links}
-              onFilesChange={setFiles}
-              onLinksChange={setLinks}
-              onRemoveExisting={(id) => setRemovedIds((prev) => [...prev, id])}
-              onProblem={setError}
-            />
-          )}
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </DialogBody>
 
           <DialogFooter>
             <Button

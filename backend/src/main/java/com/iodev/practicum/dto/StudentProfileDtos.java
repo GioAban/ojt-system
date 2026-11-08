@@ -12,7 +12,7 @@ public final class StudentProfileDtos {
             String status, String semester, String coordinatorName,
             String companyName, String departmentName,
             BigDecimal renderedHours, BigDecimal trainingDuration,
-            boolean mustChangePassword) {}
+            boolean mustChangePassword, boolean privacyAcknowledged) {}
 
     public record CompanyDepartment(Long id, String name, int slots, int filled) {}
 
@@ -25,7 +25,8 @@ public final class StudentProfileDtos {
 
     /** Isang card sa Home: requirement, weekly report o DTR. scope = requirement | weekly | dtr */
     public record WorkCard(String scope, Long id, String title, String subtitle, String type,
-                           String instructions, String dueDate, String status, boolean hasWork) {}
+                           String instructions, String dueDate, String status, boolean hasWork,
+                           boolean closed, boolean locked, String systemKey) {}
 
     public record HomeResponse(String studentStatus, List<WorkCard> items) {}
 
@@ -38,7 +39,9 @@ public final class StudentProfileDtos {
                              String templateName, String templateUrl,
                              boolean canEdit, boolean canTurnIn, boolean canUnsubmit,
                              boolean needsHours, java.math.BigDecimal hours,
-                             List<SubmissionItem> items) {}
+                             List<SubmissionItem> items,
+                             boolean closed, boolean locked, boolean canComment,
+                             List<SubmissionDtos.MaterialDto> materials, String systemKey) {}
 
     public record LinkRequest(String url, String name) {}
 

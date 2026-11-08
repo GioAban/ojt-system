@@ -3,9 +3,10 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { SemesterSwitcher } from "@/components/SemesterSwitcher";
 import { NotificationBell } from "@/components/NotificationBell";
 import { UserMenu } from "@/components/UserMenu";
+import { cn } from "@/lib/utils";
 
 /** Petsa at oras na gumagalaw; hiwalay na component para ito lang ang nagre-render kada segundo */
-function DateTime() {
+function DateTime({ className }: { className?: string }) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -26,7 +27,7 @@ function DateTime() {
   });
 
   return (
-    <div className="flex min-w-0 items-baseline gap-2 text-sm">
+    <div className={cn("flex min-w-0 items-baseline gap-2 text-sm", className)}>
       <span className="hidden text-muted-foreground sm:inline">{date}</span>
       <time dateTime={now.toISOString()} className="font-semibold tabular-nums">
         {time}
@@ -39,13 +40,14 @@ export function TopNav() {
   const showSemester = localStorage.getItem("role") === "COORDINATOR";
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b bg-background px-4 md:px-6">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-background px-2 sm:gap-3 sm:px-4 md:px-6">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <SidebarTrigger />
-        <DateTime />
+        {/* Sa maliit na telepono, mas mahalaga ang semester kaysa sa orasan */}
+        <DateTime className={showSemester ? "hidden sm:flex" : undefined} />
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-1 sm:gap-3">
         {showSemester && <SemesterSwitcher />}
         <NotificationBell />
         <UserMenu variant="topnav" />

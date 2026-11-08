@@ -15,6 +15,7 @@ import { openExternalLink, openProtectedFile } from "@/lib/files";
 import { notify } from "@/lib/notify";
 import type { MaterialItem, RequirementStats } from "@/types/requirements";
 import { MaterialChip } from "@/components/requirements/MaterialChip";
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -46,9 +47,14 @@ interface ItemCardProps {
   /** Tumataas kapag may na-save, para ma-reload ang mga attachment */
   refreshKey?: number;
   onOpenSubmissions?: () => void;
-  onEdit: () => void;
-  onToggleArchive: () => void;
+  /** Wala nito ang built-in na sarado pa: ang modal ng pagbukas ang gamit doon */
+  onEdit?: () => void;
+  /** Wala nito ang built-in: hindi ito naa-archive */
+  onToggleArchive?: () => void;
   onOpenTracking: () => void;
+  builtIn?: boolean;
+  /** Ipinapakita kapag walang bilang ang stats */
+  emptyStatsText?: string;
 }
 
 export function ItemCard({
@@ -66,6 +72,8 @@ export function ItemCard({
   onEdit,
   onToggleArchive,
   onOpenTracking,
+  builtIn = false,
+  emptyStatsText = "No students in this semester yet.",
 }: ItemCardProps) {
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState<{
@@ -149,8 +157,13 @@ export function ItemCard({
             <Icon className="h-4 w-4" />
           </span>
 
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">
-            {title}
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="min-w-0 truncate text-sm font-medium">{title}</span>
+            {builtIn && (
+              <Badge variant="secondary" className="shrink-0">
+                Built-in
+              </Badge>
+            )}
           </span>
 
           <span className="hidden shrink-0 flex-col items-end gap-0.5 text-xs sm:flex">
@@ -187,7 +200,7 @@ export function ItemCard({
                 View student work
               </DropdownMenuItem>
             )}
-            {!archived && (
+            {!archived && onEdit && (
               <DropdownMenuItem className="gap-2" onClick={onEdit}>
                 <Pencil className="h-4 w-4" />
                 Edit
@@ -197,14 +210,16 @@ export function ItemCard({
               <ExternalLink className="h-4 w-4" />
               Open Tracking
             </DropdownMenuItem>
-            <DropdownMenuItem className="gap-2" onClick={onToggleArchive}>
-              {archived ? (
-                <ArchiveRestore className="h-4 w-4" />
-              ) : (
-                <Archive className="h-4 w-4" />
-              )}
-              {archived ? "Restore" : "Archive"}
-            </DropdownMenuItem>
+            {onToggleArchive && (
+              <DropdownMenuItem className="gap-2" onClick={onToggleArchive}>
+                {archived ? (
+                  <ArchiveRestore className="h-4 w-4" />
+                ) : (
+                  <Archive className="h-4 w-4" />
+                )}
+                {archived ? "Restore" : "Archive"}
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -261,9 +276,7 @@ export function ItemCard({
           )}
 
           {stats.total === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No students in this semester yet.
-            </p>
+            <p className="text-sm text-muted-foreground">{emptyStatsText}</p>
           ) : (
             <>
               <div className="flex flex-wrap gap-x-10 gap-y-3">
@@ -331,7 +344,7 @@ export function ItemCard({
               <ExternalLink className="h-3.5 w-3.5" />
               Open Tracking
             </Button>
-            {!archived && (
+            {!archived && onEdit && (
               <Button
                 type="button"
                 variant="outline"

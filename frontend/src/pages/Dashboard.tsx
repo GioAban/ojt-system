@@ -1,21 +1,28 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Building2, FileText, ClipboardCheck } from "lucide-react";
+import { Users, Building2 } from "lucide-react";
+import { CoordinatorDashboard } from "@/components/dashboard/CoordinatorDashboard";
 
 const stats = [
   { title: "Total Students", value: "0", icon: Users },
   { title: "Partner Companies", value: "0", icon: Building2 },
-  { title: "Pending Documents", value: "0", icon: FileText },
-  { title: "Evaluations Done", value: "0", icon: ClipboardCheck },
 ];
 
 export default function Dashboard() {
   const fullname = localStorage.getItem("fullname");
 
+  if (localStorage.getItem("role") === "COORDINATOR") {
+    return (
+      <DashboardLayout>
+        <CoordinatorDashboard />
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">
+        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
           Welcome, {fullname}!
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -23,7 +30,7 @@ export default function Dashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {stats.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

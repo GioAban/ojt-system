@@ -17,6 +17,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   LayoutDashboard,
@@ -162,13 +163,14 @@ export function AppSidebar() {
   }, [role]);
 
   const menuItems = getLinksForRole(role, studentHasCompany);
+  const { isMobile, setOpenMobile } = useSidebar();
 
   return (
     <Sidebar>
       <SidebarHeader className="border-b p-4">
         <div className="flex items-center gap-3">
           <BrandMark className="h-8 w-8 text-xs" />
-          <div className="leading-tight">
+          <div className="min-w-0 leading-tight">
             <p className="text-sm font-bold tracking-tight">
               {brand.systemName}
             </p>
@@ -190,7 +192,11 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.text}>
                     <SidebarMenuButton
-                      onClick={() => navigate(item.link)}
+                      onClick={() => {
+                        navigate(item.link);
+                        // Sa telepono, isara ang drawer pagkapili ng menu
+                        if (isMobile) setOpenMobile(false);
+                      }}
                       isActive={isActive}
                       className={
                         isActive
@@ -220,6 +226,16 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t p-2">
         <UserMenu variant="sidebar" />
+        <button
+          type="button"
+          className="px-2 pb-1 text-left text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          onClick={() => {
+            navigate("/privacy");
+            if (isMobile) setOpenMobile(false);
+          }}
+        >
+          Privacy Notice
+        </button>
       </SidebarFooter>
     </Sidebar>
   );

@@ -1,5 +1,6 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.SupervisorResolver;
 import com.iodev.practicum.dto.AssignmentResultResponse;
 import com.iodev.practicum.dto.CompanyOptionResponse;
 import com.iodev.practicum.dto.DepartmentAssignRequest;
@@ -93,8 +94,10 @@ public class CoordinatorStudentController {
             byCompany.computeIfAbsent(d.getCompany().getId(), k -> new ArrayList<>()).add(
                     new CompanyOptionResponse.DepartmentOption(
                             d.getId(), d.getName(), slots, filled.getOrDefault(d.getId(), 0L), current,
-                            d.getSupervisorFullname(), d.getSupervisorPosition(),
-                            d.getSupervisorContactNumber(), d.getSupervisorEmail(),
+                            SupervisorResolver.cleanOrNull(d.getSupervisorFullname()),
+                            SupervisorResolver.cleanOrNull(d.getSupervisorPosition()),
+                            SupervisorResolver.cleanOrNull(d.getSupervisorContactNumber()),
+                            SupervisorResolver.cleanOrNull(d.getSupervisorEmail()),
                             d.getStatus(), d.getMoaStart(), d.getMoaExpiration()));
         }
 
@@ -102,7 +105,8 @@ public class CoordinatorStudentController {
                 .map(c -> new CompanyOptionResponse(
                         c.getId(), c.getName(), c.getAddress(), c.getLocation(), c.getContactNumber(),
                         c.getNature() == null ? null : c.getNature().getName(),
-                        c.getDescription(), c.getImsupFullname(), c.getImsupPosition(),
+                        c.getDescription(), SupervisorResolver.cleanOrNull(c.getImsupFullname()),
+                        SupervisorResolver.cleanOrNull(c.getImsupPosition()),
                         byCompany.getOrDefault(c.getId(), List.of())))
                 .toList();
 

@@ -23,8 +23,11 @@ export interface CompanyItem {
   natureId: number | null;
   nature: string | null;
   description: string | null;
-  supervisorName: string;
-  supervisorPosition: string;
+  /** Immediate supervisor ng company; null kapag wala */
+  supervisorName: string | null;
+  supervisorPosition: string | null;
+  supervisorContactNumber: string | null;
+  supervisorEmail: string | null;
   idType: string | null;
   idNumber: string | null;
   archived: boolean;

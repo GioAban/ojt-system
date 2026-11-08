@@ -220,7 +220,7 @@ export function CompanyInfoPanel({
 
       {error && (
         <Alert variant="destructive" className="mb-3">
-          <AlertDescription className="flex items-center justify-between gap-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {error}
             <Button variant="outline" size="sm" onClick={reload}>
               Retry
@@ -269,13 +269,13 @@ export function CompanyInfoPanel({
                 <TableHeader>
                   <TableRow>
                     <TableHead
-                      className={STICKY_HEAD}
+                      className={cn(STICKY_HEAD, "max-md:static")}
                       style={{ left: LEFT.num }}
                     >
                       #
                     </TableHead>
                     <TableHead
-                      className={STICKY_HEAD}
+                      className={cn(STICKY_HEAD, "max-md:static")}
                       style={{ left: LEFT.studentId }}
                     >
                       Student Id
@@ -283,7 +283,7 @@ export function CompanyInfoPanel({
                     <TableHead
                       className={cn(
                         STICKY_HEAD,
-                        "shadow-[1px_0_0_0_var(--border)]",
+                        "shadow-[1px_0_0_0_var(--border)] max-md:left-0!",
                       )}
                       style={{ left: LEFT.name }}
                     >
@@ -320,14 +320,14 @@ export function CompanyInfoPanel({
                     return (
                       <TableRow key={s.id}>
                         <TableCell
-                          className={cn(STICKY_CELL, "text-muted-foreground")}
+                          className={cn(STICKY_CELL, "text-muted-foreground max-md:static")}
                           style={{ left: LEFT.num }}
                         >
                           {offset + index + 1}
                         </TableCell>
 
                         <TableCell
-                          className={cn(STICKY_CELL, "truncate")}
+                          className={cn(STICKY_CELL, "truncate max-md:static")}
                           style={{ left: LEFT.studentId }}
                           title={s.studentNumber}
                         >
@@ -337,7 +337,7 @@ export function CompanyInfoPanel({
                         <TableCell
                           className={cn(
                             STICKY_CELL,
-                            "truncate font-medium shadow-[1px_0_0_0_var(--border)]",
+                            "truncate font-medium shadow-[1px_0_0_0_var(--border)] max-md:left-0!",
                           )}
                           style={{ left: LEFT.name }}
                           title={name}

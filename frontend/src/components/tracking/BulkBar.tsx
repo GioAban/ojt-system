@@ -16,7 +16,7 @@ export function BulkBar({ selection, filteredTotal, children }: BulkBarProps) {
     <div
       role="region"
       aria-label="Bulk actions"
-      className="sticky top-2 z-[3] mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card px-3 py-2 shadow-md"
+      className="sticky top-16 z-[3] mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card px-3 py-2 shadow-md"
     >
       <span className="text-sm font-medium">{selection.count} selected</span>
 

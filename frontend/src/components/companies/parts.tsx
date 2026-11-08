@@ -5,7 +5,7 @@ import { isApproved, moaState } from "@/lib/company";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 
-const CHIP = "inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-[10px] font-medium";
+const CHIP = "inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-xs font-medium";
 
 export function ApprovalBadge({ status }: { status: string }) {
   return isApproved(status) ? (
@@ -151,7 +151,7 @@ export function StatCard({ icon: Icon, label, value, hint, warn }: StatCardProps
       <div className="min-w-0">
         <p className="text-2xl font-semibold leading-none">{value}</p>
         <p className="mt-1 truncate text-xs text-muted-foreground">{label}</p>
-        {hint && <p className="truncate text-[11px] text-muted-foreground/80">{hint}</p>}
+        {hint && <p className="truncate text-xs text-muted-foreground/80">{hint}</p>}
       </div>
     </div>
   );

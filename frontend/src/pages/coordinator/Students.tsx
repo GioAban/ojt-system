@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Archive,
   ArchiveRestore,
@@ -135,7 +136,7 @@ function TabButton({
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        "-mb-px inline-flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors",
+        "-mb-px inline-flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 pointer-coarse:py-3",
         active
           ? "border-primary text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground",
@@ -165,7 +166,12 @@ export default function Students() {
   const [pendingCount, setPendingCount] = useState(0);
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [viewId, setViewId] = useState<number | null>(null);
+  // ?student=ID (hal. galing sa Dashboard) ay agad nagbubukas ng detalye ng student
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [viewId, setViewId] = useState<number | null>(() => {
+    const fromLink = Number(searchParams.get("student"));
+    return Number.isInteger(fromLink) && fromLink > 0 ? fromLink : null;
+  });
   const [confirm, setConfirm] = useState<StudentRow | null>(null);
   const [confirming, setConfirming] = useState(false);
   // Lumang link ng notification: nasa Host Training Establishments na ang Student applicants
@@ -305,7 +311,7 @@ export default function Students() {
 
       {(semesterError || error) && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription className="flex items-center justify-between gap-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {semesterError || error}
             <Button variant="outline" size="sm" onClick={reload}>
               Retry
@@ -323,7 +329,7 @@ export default function Students() {
       {semesterId !== null && (
         <>
           <div
-            className="mb-5 flex gap-1 border-b"
+            className="mb-5 flex gap-1 overflow-x-auto overscroll-x-contain border-b"
             role="tablist"
             aria-label="Student management sections"
           >
@@ -393,8 +399,8 @@ export default function Students() {
             )}
 
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                <div className="relative w-full sm:w-auto">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={search}
@@ -404,7 +410,7 @@ export default function Students() {
                     }}
                     placeholder="Search name, number, email..."
                     aria-label="Search students"
-                    className="w-64 pl-8"
+                    className="w-full pl-8 sm:w-64"
                   />
                 </div>
                 <NativeSelect
@@ -515,7 +521,7 @@ export default function Students() {
                       : "No students match your filters."}
                   </p>
                 ) : (
-                  <div className="overflow-x-auto rounded-xl border bg-card">
+                  <div className="overflow-x-auto overscroll-x-contain rounded-xl border bg-card">
                     <Table style={{ minWidth }}>
                       <TableHeader>
                         <TableRow>
@@ -797,7 +803,14 @@ export default function Students() {
 
       <StudentDrawer
         studentId={viewId}
-        onClose={() => setViewId(null)}
+        onClose={() => {
+          setViewId(null);
+          if (searchParams.has("student")) {
+            const next = new URLSearchParams(searchParams);
+            next.delete("student");
+            setSearchParams(next, { replace: true });
+          }
+        }}
         onRowChange={replaceRow}
       />
 

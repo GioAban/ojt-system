@@ -42,7 +42,7 @@ export function LoginForm({ onSubmit }: Props) {
   }
 
   return (
-    <div className="rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
+    <div className="rounded-2xl border bg-card p-5 shadow-sm sm:p-8">
       <h2 className="text-xl font-semibold tracking-tight">Sign in</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Use your email or your Student ID.
@@ -83,7 +83,7 @@ export function LoginForm({ onSubmit }: Props) {
               type="button"
               onClick={() => setShow((v) => !v)}
               aria-label={show ? "Hide password" : "Show password"}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground hover:text-foreground pointer-coarse:p-2.5"
             >
               {show ? (
                 <EyeOff className="h-4 w-4" />

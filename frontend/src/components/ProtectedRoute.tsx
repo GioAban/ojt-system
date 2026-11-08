@@ -4,15 +4,18 @@ import axios from "axios";
 import api from "@/lib/api";
 import type { StudentProfile } from "@/types/studentProfile";
 import { isPasswordOk, markPasswordOk, rememberProfile } from "@/lib/studentSession";
+import { isPrivacyOk, markPrivacyOk } from "@/lib/privacy";
+import { PrivacyAcknowledge } from "@/components/privacy/PrivacyAcknowledge";
 
-type Gate = "checking" | "ok" | "change";
+type Gate = "checking" | "ok" | "change" | "privacy";
 
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
   const token = localStorage.getItem("token");
   const isStudent = localStorage.getItem("role") === "STUDENT";
 
   // Ang student na default password pa ang gamit ay ipapalit muna bago makapasok kahit saan
-  const needsCheck = Boolean(token) && isStudent && !isPasswordOk();
+  // Pagkatapos nito, ipinapakilala ang Privacy Notice (isang beses, o kapag nagbago ang bersyon). Student lang.
+  const needsCheck = Boolean(token) && isStudent && (!isPasswordOk() || !isPrivacyOk());
   const [gate, setGate] = useState<Gate>(needsCheck ? "checking" : "ok");
 
   useEffect(() => {
@@ -26,8 +29,12 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
         rememberProfile(res.data);
         if (res.data.mustChangePassword) {
           setGate("change");
+        } else if (!res.data.privacyAcknowledged) {
+          markPasswordOk();
+          setGate("privacy");
         } else {
           markPasswordOk();
+          markPrivacyOk();
           setGate("ok");
         }
       })
@@ -81,6 +88,17 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (gate === "checking") {
     return null;
+  }
+
+  if (gate === "privacy") {
+    return (
+      <PrivacyAcknowledge
+        onDone={() => {
+          markPrivacyOk();
+          setGate("ok");
+        }}
+      />
+    );
   }
 
   return <>{children}</>;

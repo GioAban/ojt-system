@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -80,8 +81,8 @@ export function SemesterFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <DialogContent size="xl">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader>
             <DialogTitle>
               {semester ? "Edit Semester" : "Add Semester"}
@@ -91,39 +92,41 @@ export function SemesterFormDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-2">
-            <Label>Term</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {TERMS.map((value) => (
-                <Button
-                  key={value}
-                  type="button"
-                  variant={term === value ? "default" : "outline"}
-                  onClick={() => setTerm(value)}
-                >
-                  {value}
-                </Button>
-              ))}
+          <DialogBody className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <Label>Term</Label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {TERMS.map((value) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    variant={term === value ? "default" : "outline"}
+                    onClick={() => setTerm(value)}
+                  >
+                    {value}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="semester-year">Start year</Label>
-            <Input
-              id="semester-year"
-              inputMode="numeric"
-              maxLength={4}
-              value={year}
-              onChange={(e) => setYear(e.target.value.replace(/\D/g, ""))}
-            />
-          </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="semester-year">Start year</Label>
+              <Input
+                id="semester-year"
+                inputMode="numeric"
+                maxLength={4}
+                value={year}
+                onChange={(e) => setYear(e.target.value.replace(/\D/g, ""))}
+              />
+            </div>
 
-          <div className="rounded-md border bg-muted/40 px-3 py-2">
-            <p className="text-xs text-muted-foreground">Will be saved as</p>
-            <p className="text-sm font-medium">{preview}</p>
-          </div>
+            <div className="rounded-md border bg-muted/40 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Will be saved as</p>
+              <p className="text-sm font-medium">{preview}</p>
+            </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </DialogBody>
 
           <DialogFooter>
             <Button

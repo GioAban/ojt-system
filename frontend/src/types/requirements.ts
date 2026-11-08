@@ -18,6 +18,11 @@ export interface DocumentItem {
   createdAt: string | null;
   archived: boolean;
   stats: RequirementStats;
+  /** May laman lang sa built-in (Midterm at Final Evaluation) */
+  systemKey: string | null;
+  /** Built-in lang: ilan ang bukas sa kabuuang aktibong student */
+  openCount: number | null;
+  studentCount: number | null;
 }
 
 export interface WeeklyItem {
@@ -90,6 +95,7 @@ export interface SubmissionsData {
   dateTo?: string | null;
   materials?: MaterialItem[];
   students: SubmissionStudent[];
+  systemKey?: string | null;
 }
 
 export interface CommentItem {

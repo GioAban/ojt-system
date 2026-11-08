@@ -21,10 +21,14 @@ import com.iodev.practicum.repository.SignedDtrRepository;
 import com.iodev.practicum.repository.SignedWeeklyReportRepository;
 import com.iodev.practicum.repository.StudentDepartmentHistoryRepository;
 import com.iodev.practicum.repository.StudentRepository;
+import com.iodev.practicum.service.StudentNotifier;
+import com.iodev.practicum.util.EvaluationAccess;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -55,6 +59,8 @@ public class BulkController {
     public record BulkRatingRequest(List<Long> studentIds, List<Long> reportIds, String rating) {}
     public record BulkHoursRequest(List<Long> studentIds, Long dtrId, BigDecimal hours) {}
     public record BulkStartDateRequest(List<Long> studentIds, String startDate) {}
+    public record BulkEvaluationAccessRequest(Long semesterId, String key, List<Long> studentIds, Boolean open) {}
+    public record BulkEvaluationAccessAllRequest(Long semesterId, String key, Boolean open) {}
     /** rating (weekly) at hours (DTR) ay opsyonal at para lang sa Checked: pinapalitan nito ang laman ng bawat cell */
     public record BulkItemsStatusRequest(
             List<Long> studentIds, List<Long> itemIds, String status, String rating, BigDecimal hours) {}
@@ -81,6 +87,7 @@ public class BulkController {
     @Autowired private SignedWeeklyReportRepository signedWeeklyRepository;
     @Autowired private MonthlyDtrRepository dtrRepository;
     @Autowired private SignedDtrRepository signedDtrRepository;
+    @Autowired private StudentNotifier studentNotifier;
 
     // ---------------------------------------------------------------------
     // Mga helper
@@ -158,6 +165,85 @@ public class BulkController {
 
     private ResponseEntity<?> bad(String message) {
         return ResponseEntity.badRequest().body(message);
+    }
+
+    // ---------------------------------------------------------------------
+    // Pagbukas at pagsara ng Midterm at Final Evaluation
+    // ---------------------------------------------------------------------
+
+    @PostMapping("/evaluation-access")
+    @Transactional
+    public ResponseEntity<?> evaluationAccess(@RequestBody BulkEvaluationAccessRequest request,
+                                              Authentication authentication) {
+        if (request == null) return bad("Request body is required.");
+        if (!EvaluationAccess.validKey(request.key())) return bad("Unknown evaluation.");
+        if (request.semesterId() == null) return bad("Select a semester.");
+        if (request.open() == null) return bad("Choose whether to open or close it.");
+
+        Scope scope = scope(request.studentIds(), authentication);
+        if (scope.error() != null) return scope.error();
+
+        return ResponseEntity.ok(applyAccess(scope.coordinator().getId(), request.semesterId(), request.key(),
+                request.open(), scope.students(), new Tally(scope.foreign())));
+    }
+
+    /** Buong evaluation mula sa Requirements page: lahat ng aktibong student ng coordinator na naka-login */
+    @PostMapping("/evaluation-access/all")
+    @Transactional
+    public ResponseEntity<?> evaluationAccessAll(@RequestBody BulkEvaluationAccessAllRequest request,
+                                                 Authentication authentication) {
+        if (request == null) return bad("Request body is required.");
+        if (!EvaluationAccess.validKey(request.key())) return bad("Unknown evaluation.");
+        if (request.semesterId() == null) return bad("Select a semester.");
+        if (request.open() == null) return bad("Choose whether to open or close it.");
+
+        Coordinator coordinator = coordinatorRepository.findByUserEmail(authentication.getName()).orElse(null);
+        if (coordinator == null) return ResponseEntity.status(403).body("Coordinator profile not found.");
+
+        List<Student> students = studentRepository.findForTracking(coordinator.getId(), request.semesterId());
+        return ResponseEntity.ok(applyAccess(coordinator.getId(), request.semesterId(), request.key(),
+                request.open(), students, new Tally(0)));
+    }
+
+    private BulkResult applyAccess(Long coordinatorId, Long semesterId, String key, boolean open,
+                                   List<Student> students, Tally tally) {
+        List<Student> changed = new ArrayList<>();
+        for (Student s : students) {
+            if (!semesterId.equals(s.getSemester().getId())) {
+                tally.skip("belong to a different semester");
+            } else if (Boolean.TRUE.equals(s.getIsArchived())) {
+                tally.skip("are archived");
+            } else if (EvaluationAccess.isOpen(s, key) == open) {
+                tally.skip(open ? "were already open" : "were already closed");
+            } else {
+                EvaluationAccess.setOpen(s, key, open);
+                changed.add(s);
+                tally.ok();
+            }
+        }
+        studentRepository.saveAll(changed);
+        if (open) notifyOpened(coordinatorId, semesterId, key, changed);
+        return tally.done();
+    }
+
+    /** Pagkatapos ma-commit lang, at ang pagpalya ay hindi dapat makapigil sa pagbukas */
+    private void notifyOpened(Long coordinatorId, Long semesterId, String key, List<Student> opened) {
+        if (opened.isEmpty()) return;
+        DocumentRequirement requirement = requirementRepository.findBuiltIn(coordinatorId, semesterId, key).orElse(null);
+        if (requirement == null) return;
+
+        List<Long> ids = opened.stream().map(Student::getId).toList();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    studentNotifier.evaluationOpened(requirement, ids);
+                } catch (RuntimeException e) {
+                    org.slf4j.LoggerFactory.getLogger(BulkController.class)
+                            .warn("Couldn't save the evaluation notifications", e);
+                }
+            }
+        });
     }
 
     // ---------------------------------------------------------------------

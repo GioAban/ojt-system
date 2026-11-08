@@ -38,4 +38,8 @@ public interface SignedDtrRepository extends JpaRepository<SignedDtr, Long> {
     @Query("select sum(s.hours) from SignedDtr s where s.student.id = :studentId "
             + "and lower(s.status) = 'checked'")
     BigDecimal totalHours(@Param("studentId") Long studentId);
+
+    /** student id, DTR month id, status, updated at */
+    @Query("select s.student.id, s.monthlyDtr.id, s.status, s.updatedAt from SignedDtr s where s.monthlyDtr.id in :dtrIds")
+    List<Object[]> findTimeline(@Param("dtrIds") Collection<Long> dtrIds);
 }

@@ -35,7 +35,7 @@ export function ReviewStatusCell({ status, detail, title, pending, onChange, onV
         title={tooltip}
         aria-label={`${tooltip}. Open menu`}
         className={cn(
-          "inline-flex h-6 w-full items-center justify-between gap-0.5 rounded-md border px-1.5 text-[10px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "inline-flex h-6 w-full items-center justify-between gap-0.5 rounded-md border px-1.5 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
           config.chipClass,
           pending && "opacity-40",
         )}

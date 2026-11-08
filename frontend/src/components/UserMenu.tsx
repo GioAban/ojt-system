@@ -38,8 +38,8 @@ export function UserMenu({ variant = "sidebar" }: UserMenuProps) {
       <DropdownMenuTrigger
         className={
           isSidebar
-            ? "flex w-full items-center gap-3 rounded-md p-2 text-left outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring"
-            : "flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            ? "flex w-full items-center gap-3 rounded-md p-2 text-left pointer-coarse:py-2.5 outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring"
+            : "flex shrink-0 items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:p-1.5"
         }
       >
         <Avatar className="h-8 w-8">
@@ -64,7 +64,7 @@ export function UserMenu({ variant = "sidebar" }: UserMenuProps) {
       <DropdownMenuContent
         side={isSidebar ? "top" : "bottom"}
         align={isSidebar ? "start" : "end"}
-        className="w-56"
+        className="w-56 max-w-[calc(100vw-1rem)]"
       >
         <div className="px-2 py-1.5">
           <p className="truncate text-sm font-medium">{fullname}</p>

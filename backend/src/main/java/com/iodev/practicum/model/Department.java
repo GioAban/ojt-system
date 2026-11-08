@@ -64,6 +64,10 @@ public class Department {
     @Column(name = "privacy_notice_version", length = 20)
     private String privacyNoticeVersion;
 
+    /** Kailan sinabi ng student na may pahintulot siya ng supervisor na ibahagi ang contact details nito */
+    @Column(name = "supervisor_share_confirmed_at")
+    private LocalDateTime supervisorShareConfirmedAt;
+
     @Column(name = "signed_moa")
     private String signedMoa;
 
@@ -134,6 +138,9 @@ public class Department {
 
     public LocalDateTime getPrivacyConsentAt() { return privacyConsentAt; }
     public void setPrivacyConsentAt(LocalDateTime v) { this.privacyConsentAt = v; }
+
+    public LocalDateTime getSupervisorShareConfirmedAt() { return supervisorShareConfirmedAt; }
+    public void setSupervisorShareConfirmedAt(LocalDateTime v) { this.supervisorShareConfirmedAt = v; }
 
     public String getPrivacyNoticeVersion() { return privacyNoticeVersion; }
     public void setPrivacyNoticeVersion(String v) { this.privacyNoticeVersion = v; }

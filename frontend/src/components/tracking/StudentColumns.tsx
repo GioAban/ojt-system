@@ -75,11 +75,13 @@ export function StudentHeadCells({
 }: StudentHeadCellsProps) {
   const left = offsets(Boolean(selection));
   const base = "sticky z-[1] bg-card px-2 pb-2 align-bottom";
+  // Sa telepono, pangalan lang ang nakapirmi para may lugar pa ang ibang column
+  const loose = "max-md:static";
 
   return (
     <>
       {selection && (
-        <TableHead className={cn(base, className)} style={{ left: 0 }}>
+        <TableHead className={cn(base, loose, className)} style={{ left: 0 }}>
           <SelectBox
             checked={selection.checked}
             indeterminate={selection.indeterminate}
@@ -88,14 +90,14 @@ export function StudentHeadCells({
           />
         </TableHead>
       )}
-      <TableHead className={cn(base, className)} style={{ left: left.num }}>
+      <TableHead className={cn(base, loose, className)} style={{ left: left.num }}>
         #
       </TableHead>
-      <TableHead className={cn(base, className)} style={{ left: left.student }}>
+      <TableHead className={cn(base, loose, className)} style={{ left: left.student }}>
         Student
       </TableHead>
       <TableHead
-        className={cn(base, "shadow-[1px_0_0_0_var(--border)]", className)}
+        className={cn(base, "shadow-[1px_0_0_0_var(--border)] max-md:left-0!", className)}
         style={{ left: left.name }}
       >
         Name
@@ -126,7 +128,7 @@ export function StudentCells({
     <>
       {selection && (
         <TableCell
-          className={cn("sticky z-[1] px-2 py-0", bg)}
+          className={cn("sticky z-[1] px-2 py-0 max-md:static", bg)}
           style={{ left: 0 }}
         >
           <SelectBox
@@ -137,13 +139,13 @@ export function StudentCells({
         </TableCell>
       )}
       <TableCell
-        className={cn("sticky z-[1] px-2 py-0 text-muted-foreground", bg)}
+        className={cn("sticky z-[1] px-2 py-0 text-muted-foreground max-md:static", bg)}
         style={{ left: left.num }}
       >
         {number}
       </TableCell>
       <TableCell
-        className={cn("sticky z-[1] truncate px-2 py-0", bg)}
+        className={cn("sticky z-[1] truncate px-2 py-0 max-md:static", bg)}
         style={{ left: left.student }}
         title={student.studentNumber}
       >
@@ -151,7 +153,7 @@ export function StudentCells({
       </TableCell>
       <TableCell
         className={cn(
-          "sticky z-[1] truncate px-2 py-0 font-medium shadow-[1px_0_0_0_var(--border)]",
+          "sticky z-[1] truncate px-2 py-0 font-medium shadow-[1px_0_0_0_var(--border)] max-md:left-0!",
           bg,
         )}
         style={{ left: left.name }}

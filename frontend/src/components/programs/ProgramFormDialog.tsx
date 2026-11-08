@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/native-select";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -103,8 +104,8 @@ export function ProgramFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <DialogContent size="2xl">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader>
             <DialogTitle>
               {program ? "Edit Program" : "Add Program"}
@@ -115,68 +116,70 @@ export function ProgramFormDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-2 [&>div]:w-full">
-            <Label htmlFor="program-college">College</Label>
-            <NativeSelect
-              id="program-college"
-              className="w-full"
-              value={collegeId}
-              onChange={(e) => setCollegeId(e.target.value)}
-            >
-              <NativeSelectOption value="">Select a college</NativeSelectOption>
-              {collegeOptions.map((c) => (
-                <NativeSelectOption key={c.id} value={String(c.id)}>
-                  {c.abbreviation} — {c.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="program-name">Program name</Label>
-            <Input
-              id="program-name"
-              maxLength={255}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="program-abbreviation">Abbreviation</Label>
-              <Input
-                id="program-abbreviation"
-                maxLength={20}
-                value={abbreviation}
-                onChange={(e) => setAbbreviation(e.target.value.toUpperCase())}
-              />
+          <DialogBody className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2 [&>div]:w-full">
+              <Label htmlFor="program-college">College</Label>
+              <NativeSelect
+                id="program-college"
+                className="w-full"
+                value={collegeId}
+                onChange={(e) => setCollegeId(e.target.value)}
+              >
+                <NativeSelectOption value="">Select a college</NativeSelectOption>
+                {collegeOptions.map((c) => (
+                  <NativeSelectOption key={c.id} value={String(c.id)}>
+                    {c.abbreviation} — {c.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="program-hours">Training hours</Label>
+              <Label htmlFor="program-name">Program name</Label>
               <Input
-                id="program-hours"
-                inputMode="decimal"
-                value={hours}
-                onChange={(e) =>
-                  setHours(e.target.value.replace(/[^\d.]/g, ""))
-                }
+                id="program-name"
+                maxLength={255}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
               />
             </div>
-          </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="program-head">Program head</Label>
-            <Input
-              id="program-head"
-              maxLength={45}
-              value={programHead}
-              onChange={(e) => setProgramHead(e.target.value)}
-            />
-          </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="program-abbreviation">Abbreviation</Label>
+                <Input
+                  id="program-abbreviation"
+                  maxLength={20}
+                  value={abbreviation}
+                  onChange={(e) => setAbbreviation(e.target.value.toUpperCase())}
+                />
+              </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="program-hours">Training hours</Label>
+                <Input
+                  id="program-hours"
+                  inputMode="decimal"
+                  value={hours}
+                  onChange={(e) =>
+                    setHours(e.target.value.replace(/[^\d.]/g, ""))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="program-head">Program head</Label>
+              <Input
+                id="program-head"
+                maxLength={45}
+                value={programHead}
+                onChange={(e) => setProgramHead(e.target.value)}
+              />
+            </div>
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </DialogBody>
 
           <DialogFooter>
             <Button

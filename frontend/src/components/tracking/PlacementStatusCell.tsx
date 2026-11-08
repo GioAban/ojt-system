@@ -80,7 +80,7 @@ export function PlacementStatusCell({ status, pending, onChange }: Props) {
         <span className="truncate">{current.label}</span>
         <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
+      <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-1rem)]">
         {PLACEMENT_OPTIONS.map((option) => (
           <DropdownMenuItem
             key={option.key}

@@ -67,7 +67,8 @@ public class StudentNotificationsController {
             String link = "/student/work/" + r.scope() + "/" + r.id();
             String label = kindLabel(r);
             LocalDateTime created = toLocal(r.createdAt());
-            if (created != null && created.isAfter(since)) {
+            // Ang built-in ay hindi "bago" para sa student: binubuksan ito ng coordinator kapag handa na
+            if (created != null && created.isAfter(since) && r.systemKey() == null) {
                 String due = r.dueDate() == null ? "" : " Due " + toLocal(r.dueDate()).toLocalDate() + ".";
                 items.add(new NotificationItem("new-" + r.scope() + "-" + r.id(), "assigned",
                         "New " + label + ": " + r.title(),
@@ -114,10 +115,10 @@ public class StudentNotificationsController {
         };
     }
 
-    /** Ang type ng comment ay "comment:<scope>:<refId>", kaya alam kung saan dadalhin ang student */
+    /** Ang type ng comment at ng nabuksang evaluation ay "<uri>:<scope>:<refId>", kaya alam kung saan dadalhin ang student */
     private static String linkFor(StudentNotification n) {
         String type = n.getType() == null ? "" : n.getType().toLowerCase();
-        if (type.startsWith("comment:")) {
+        if (type.startsWith("comment:") || type.startsWith("evaluation_open:")) {
             String[] parts = type.split(":");
             if (parts.length == 3) return "/student/work/" + parts[1] + "/" + parts[2];
             return "/student/home";

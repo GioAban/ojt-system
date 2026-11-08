@@ -30,7 +30,7 @@ export default function StudentAnnouncements() {
 
   return (
     <DashboardLayout>
-      <h1 className="text-2xl font-bold tracking-tight">Announcements</h1>
+      <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Announcements</h1>
       <p className="mb-6 mt-1 text-sm text-muted-foreground">Updates and files from your coordinator.</p>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

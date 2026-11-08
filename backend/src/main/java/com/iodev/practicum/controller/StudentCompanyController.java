@@ -1,5 +1,7 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.PrivacySettings;
+import com.iodev.practicum.service.SupervisorResolver;
 import com.iodev.practicum.model.Company;
 import com.iodev.practicum.model.CompanyApplication;
 import com.iodev.practicum.model.Coordinator;
@@ -36,6 +38,7 @@ public class StudentCompanyController {
     private static final int MAX_PENDING_APPLICATIONS = 3;
     private static final int MAX_PENDING_REQUESTS = 3;
 
+    @Autowired private PrivacySettings privacySettings;
     @Autowired private StudentManagementRepository studentManagementRepository;
     @Autowired private StudentRepository studentRepository;
     @Autowired private CompanyRepository companyRepository;
@@ -77,7 +80,7 @@ public class StudentCompanyController {
     public record NewRequestBody(Long existingCompanyId, String companyName, String address, String contactNumber,
                               String location, String departmentName, String supervisorFullname,
                               String supervisorPosition, String supervisorEmail, String supervisorContactNumber,
-                              Boolean confirmDifferent) {}
+                              Boolean confirmDifferent, Boolean supervisorPermission) {}
 
     // ---------------------------------------------------------------------
     // Overview
@@ -147,11 +150,12 @@ public class StudentCompanyController {
                     null, null, null, null));
         }
         Company c = d.getCompany();
+        SupervisorResolver.Supervisor sup = SupervisorResolver.forDepartment(d);
         return ResponseEntity.ok(new MyCompany(true, status, c.getName(),
                 c.getNature() == null ? null : c.getNature().getName(),
                 c.getAddress(), c.getLocation(), c.getContactNumber(), deptLabel(d.getName()),
-                d.getSupervisorFullname(), d.getSupervisorPosition(), d.getSupervisorEmail(),
-                d.getSupervisorContactNumber()));
+                sup.nameOrNull(), sup.positionOrNull(), sup.emailOrNull(),
+                sup.contactNumberOrNull()));
     }
 
     // ---------------------------------------------------------------------
@@ -279,6 +283,16 @@ public class StudentCompanyController {
         if (deptName.isEmpty()) return bad("Department is required.");
         if (deptName.length() > 255) return bad("Department name is too long.");
 
+        // Immediate supervisor: opsyonal, pero magkapares ang pangalan at posisyon
+        String supError = SupervisorResolver.validate(body.supervisorFullname(), body.supervisorPosition(),
+                body.supervisorContactNumber(), body.supervisorEmail(), "supervisor");
+        if (supError != null) return bad(supError);
+        boolean hasSupervisor = SupervisorResolver.anyFilled(body.supervisorFullname(), body.supervisorPosition(),
+                body.supervisorContactNumber(), body.supervisorEmail());
+        if (hasSupervisor && !Boolean.TRUE.equals(body.supervisorPermission())) {
+            return bad("Please confirm that you have the supervisor's permission to share these contact details.");
+        }
+
         if (pendingRequests(s) >= MAX_PENDING_REQUESTS) {
             return ResponseEntity.status(409).body("You already have " + MAX_PENDING_REQUESTS
                     + " pending requests. Wait for your coordinator to review them.");
@@ -314,10 +328,13 @@ public class StudentCompanyController {
             company.setContactNumber(contact);
             String loc = clean(body.location());
             company.setLocation(loc.isEmpty() ? null : loc);
-            String sup = clean(body.supervisorFullname());
-            String pos = clean(body.supervisorPosition());
-            company.setImsupFullname(sup.isEmpty() ? "N/A" : sup);
-            company.setImsupPosition(pos.isEmpty() ? "N/A" : pos);
+            // Bagong company: ang supervisor ay ang immediate supervisor ng company (blangko kapag wala).
+            // Nagagawa na ang company ngayon, kaya dala na nito ang detalye pagka-approve.
+            company.setImsupFullname(SupervisorResolver.clean(body.supervisorFullname()));
+            company.setImsupPosition(SupervisorResolver.clean(body.supervisorPosition()));
+            company.setImsupContactNumber(SupervisorResolver.cleanOrNull(body.supervisorContactNumber()));
+            String supEmail = SupervisorResolver.clean(body.supervisorEmail()).toLowerCase();
+            company.setImsupEmail(supEmail.isEmpty() ? null : supEmail);
             company = companyRepository.save(company);
         }
 
@@ -335,10 +352,18 @@ public class StudentCompanyController {
         d.setSlots(1);
         d.setStatus("pending");
         d.setRequestedByStudentId(s.getId());
-        d.setSupervisorFullname(nullIfEmpty(body.supervisorFullname()));
-        d.setSupervisorPosition(nullIfEmpty(body.supervisorPosition()));
-        d.setSupervisorEmail(nullIfEmpty(body.supervisorEmail()));
-        d.setSupervisorContactNumber(nullIfEmpty(body.supervisorContactNumber()));
+        if (body.existingCompanyId() != null) {
+            // Bagong department sa dati nang company: sa department ang supervisor
+            d.setSupervisorFullname(SupervisorResolver.cleanOrNull(body.supervisorFullname()));
+            d.setSupervisorPosition(SupervisorResolver.cleanOrNull(body.supervisorPosition()));
+            String supEmail = SupervisorResolver.clean(body.supervisorEmail()).toLowerCase();
+            d.setSupervisorEmail(supEmail.isEmpty() ? null : supEmail);
+            d.setSupervisorContactNumber(SupervisorResolver.cleanOrNull(body.supervisorContactNumber()));
+        }
+        if (hasSupervisor) {
+            d.setSupervisorShareConfirmedAt(java.time.LocalDateTime.now());
+            d.setPrivacyNoticeVersion(privacySettings.getNoticeVersion());
+        }
         d = departmentRepository.save(d);
 
         coordinatorNotifier.fromStudent(s, "company_request", "New company request",
@@ -394,11 +419,6 @@ public class StudentCompanyController {
 
     private static String clean(String v) {
         return v == null ? "" : v.trim().replaceAll("\\s+", " ");
-    }
-
-    private static String nullIfEmpty(String v) {
-        String c = clean(v);
-        return c.isEmpty() ? null : c;
     }
 
     private Student current(Authentication authentication) {

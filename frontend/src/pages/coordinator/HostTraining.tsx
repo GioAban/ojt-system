@@ -5,6 +5,7 @@ import { isApproved } from "@/lib/company";
 import { getErrorMessage } from "@/lib/errors";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { stackedTableWrap } from "@/lib/responsive";
 import { useSemester } from "@/contexts/semesterContext";
 import { useSectionData } from "@/hooks/useTracking";
 import type {
@@ -364,7 +365,7 @@ export default function HostTraining() {
 
       {(semesterError || error) && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription className="flex items-center justify-between gap-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {semesterError || error}
             <Button variant="outline" size="sm" onClick={reload}>
               Retry
@@ -415,7 +416,7 @@ export default function HostTraining() {
             />
           </div>
 
-          <nav className="mb-4 flex gap-1 border-b" aria-label="Views">
+          <nav className="mb-4 flex gap-1 overflow-x-auto overscroll-x-contain border-b" aria-label="Views">
             {TABS.map((t) => (
               <button
                 key={t.value}
@@ -425,7 +426,7 @@ export default function HostTraining() {
                   setPage(1);
                 }}
                 className={cn(
-                  "-mb-px border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                  "-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium outline-none sm:px-4 pointer-coarse:py-3 transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                   tab === t.value
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground",
@@ -520,7 +521,7 @@ export default function HostTraining() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   {STATUS_OPTIONS.map((o) => (
                     <Button
                       key={o.value}
@@ -626,7 +627,7 @@ export default function HostTraining() {
               )}
 
               {!loading && total > 0 && tab === "listing" && (
-                <div className="isolate rounded-xl border bg-card">
+                <div className={cn("isolate rounded-xl border bg-card", stackedTableWrap)}>
                   <CompanyListing
                     rows={rowPage}
                     offset={start}

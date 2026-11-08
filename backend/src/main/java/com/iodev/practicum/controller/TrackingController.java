@@ -22,6 +22,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import com.iodev.practicum.util.EmploymentValues;
+import com.iodev.practicum.util.EvaluationAccess;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -72,8 +73,11 @@ public class TrackingController {
             return ResponseEntity.status(403).body("Coordinator profile not found.");
         }
 
+        // Hiwalay na sub-view ang mga built-in (tingnan ang /evaluation sa ibaba)
         List<DocumentRequirement> requirements =
-                documentRequirementRepository.findForTracking(coordinator.getId(), semesterId, normalizedType);
+                documentRequirementRepository.findForTracking(coordinator.getId(), semesterId, normalizedType).stream()
+                        .filter(r -> !EvaluationAccess.isBuiltIn(r))
+                        .toList();
         List<Student> students = studentRepository.findForTracking(coordinator.getId(), semesterId);
 
         // "studentId-requirementId" -> pinakamahalagang status
@@ -114,6 +118,51 @@ public class TrackingController {
         }
 
         return ResponseEntity.ok(new TrackingResponse(semesterId, normalizedType, columns, rows));
+    }
+
+    public record EvaluationItem(Long id, String title, java.sql.Timestamp dueDate) {}
+
+    public record EvaluationStudent(Long id, String studentNumber, String firstname, String lastname,
+                                    String middleInitial, String subjectCode, String status, boolean open) {}
+
+    /** requirement ay null lang kung hindi pa ito nagawa (hal. pumalya ang pag-start) */
+    public record EvaluationTracking(Long semesterId, String key, EvaluationItem requirement,
+                                     List<EvaluationStudent> students) {}
+
+    /** Isang built-in na evaluation: status at kung bukas ito para sa bawat student */
+    @GetMapping("/evaluation")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> evaluation(@RequestParam Long semesterId,
+                                        @RequestParam String key,
+                                        Authentication authentication) {
+        if (!EvaluationAccess.validKey(key)) {
+            return ResponseEntity.badRequest().body("Unknown evaluation.");
+        }
+        Coordinator coordinator = coordinatorRepository.findByUserEmail(authentication.getName()).orElse(null);
+        if (coordinator == null) {
+            return ResponseEntity.status(403).body("Coordinator profile not found.");
+        }
+
+        DocumentRequirement requirement =
+                documentRequirementRepository.findBuiltIn(coordinator.getId(), semesterId, key).orElse(null);
+
+        Map<Long, String> statuses = new HashMap<>();
+        if (requirement != null) {
+            for (Object[] row : attachmentRepository.findStatuses(List.of(requirement.getId()))) {
+                statuses.merge(((Number) row[0]).longValue(), normalize((String) row[2]), TrackingController::strongest);
+            }
+        }
+
+        List<EvaluationStudent> rows = new ArrayList<>();
+        for (Student s : studentRepository.findForTracking(coordinator.getId(), semesterId)) {
+            rows.add(new EvaluationStudent(s.getId(), s.getStudentNumber(), s.getFirstname(), s.getLastname(),
+                    s.getMiddleInitial(), s.getSubjectCode(),
+                    statuses.getOrDefault(s.getId(), "ASSIGNED"), EvaluationAccess.isOpen(s, key)));
+        }
+
+        EvaluationItem item = requirement == null ? null
+                : new EvaluationItem(requirement.getId(), requirement.getTitle(), requirement.getDueDate());
+        return ResponseEntity.ok(new EvaluationTracking(semesterId, key, item, rows));
     }
 
     @PatchMapping("/status")

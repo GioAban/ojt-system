@@ -28,7 +28,7 @@ function Item({ label, value, icon: Icon }: { label: string; value: string | nul
     <div className="flex items-start gap-2">
       {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
       <div className="min-w-0">
-        <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+        <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
         <dd className="break-words text-sm">{value}</dd>
       </div>
     </div>
@@ -37,7 +37,7 @@ function Item({ label, value, icon: Icon }: { label: string; value: string | nul
 
 function Card({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border bg-card p-5">
+    <section className="rounded-xl border bg-card p-4 sm:p-5">
       <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold">
         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Icon className="h-4 w-4" />
@@ -63,7 +63,7 @@ export default function StudentMyCompany() {
 
   return (
     <DashboardLayout>
-      <h1 className="text-2xl font-bold tracking-tight">My Company</h1>
+      <h1 className="text-xl font-bold tracking-tight sm:text-2xl">My Company</h1>
       <p className="mb-6 mt-1 text-sm text-muted-foreground">Where you are doing your OJT.</p>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

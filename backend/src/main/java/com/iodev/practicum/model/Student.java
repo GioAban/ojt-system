@@ -126,6 +126,13 @@ public class Student {
     @Column(name = "must_change_password", nullable = false)
     private Boolean mustChangePassword = false;
 
+    /** Kailan at aling bersyon ng Privacy Notice ang kinilala ng student (RA 10173) */
+    @Column(name = "privacy_ack_at")
+    private java.time.LocalDateTime privacyAckAt;
+
+    @Column(name = "privacy_ack_version", length = 20)
+    private String privacyAckVersion;
+
     private String otp;
 
     @org.hibernate.annotations.CreationTimestamp
@@ -258,6 +265,12 @@ public class Student {
 
     public Boolean getMustChangePassword() { return mustChangePassword; }
     public void setMustChangePassword(Boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
+
+    public java.time.LocalDateTime getPrivacyAckAt() { return privacyAckAt; }
+    public void setPrivacyAckAt(java.time.LocalDateTime privacyAckAt) { this.privacyAckAt = privacyAckAt; }
+
+    public String getPrivacyAckVersion() { return privacyAckVersion; }
+    public void setPrivacyAckVersion(String privacyAckVersion) { this.privacyAckVersion = privacyAckVersion; }
 
     public String getOtp() { return otp; }
     public void setOtp(String otp) { this.otp = otp; }

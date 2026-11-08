@@ -1,5 +1,6 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.SupervisorResolver;
 import com.iodev.practicum.model.College;
 import com.iodev.practicum.model.Company;
 import com.iodev.practicum.model.Coordinator;
@@ -142,8 +143,8 @@ public class StudentDtrDraftController {
                 nz(dtr.getMonth()),
                 ym == null ? "" : ym.atDay(1).toString(),
                 ym == null ? "" : ym.atEndOfMonth().toString(),
-                dept == null ? "" : nz(dept.getSupervisorFullname()),
-                dept == null ? "" : nz(dept.getSupervisorPosition()));
+                SupervisorResolver.forDepartment(dept).name(),
+                SupervisorResolver.forDepartment(dept).position());
     }
 
     /**

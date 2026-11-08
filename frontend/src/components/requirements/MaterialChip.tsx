@@ -94,7 +94,7 @@ export function MaterialChip({
       )}
 
       {badge && (
-        <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+        <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
           {badge}
         </span>
       )}

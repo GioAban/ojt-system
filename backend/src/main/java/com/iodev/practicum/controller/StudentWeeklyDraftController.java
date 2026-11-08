@@ -1,5 +1,6 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.SupervisorResolver;
 import com.iodev.practicum.model.College;
 import com.iodev.practicum.model.Coordinator;
 import com.iodev.practicum.model.Department;
@@ -114,8 +115,8 @@ public class StudentWeeklyDraftController {
                 college == null ? "" : nz(college.getAbbreviation()),
                 week.getMonthFrom() == null ? "" : week.getMonthFrom().toString(),
                 week.getMonthTo() == null ? "" : week.getMonthTo().toString(),
-                dept == null ? "" : nz(dept.getSupervisorFullname()),
-                dept == null ? "" : nz(dept.getSupervisorPosition()),
+                SupervisorResolver.forDepartment(dept).name(),
+                SupervisorResolver.forDepartment(dept).position(),
                 college == null || college.getLogo() == null || college.getLogo().isBlank() ? ""
                         : "/public/colleges/" + college.getId() + "/logo?v="
                         + (college.getUpdatedAt() == null ? 0 : college.getUpdatedAt().getTime()));

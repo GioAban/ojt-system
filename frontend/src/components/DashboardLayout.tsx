@@ -16,9 +16,9 @@ export function DashboardLayout({
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset className="bg-muted/30">
+      <SidebarInset className="min-w-0 overflow-x-clip bg-muted/30">
         <TopNav />
-        <main className={cn("min-w-0 flex-1 p-6", wide ? "md:p-4" : "md:p-8")}>
+        <main className={cn("min-w-0 flex-1 px-4 py-5 sm:p-6", wide ? "md:p-4" : "md:p-8")}>
           <div
             className={cn("mx-auto min-w-0", wide ? "max-w-none" : "max-w-8xl")}
           >

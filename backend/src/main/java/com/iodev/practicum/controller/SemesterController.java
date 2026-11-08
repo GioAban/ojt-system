@@ -23,6 +23,9 @@ public class SemesterController {
     @Autowired
     private SemesterRepository semesterRepository;
 
+    @Autowired
+    private com.iodev.practicum.service.BuiltInRequirementService builtInRequirements;
+
     @GetMapping
     public List<Semester> getAll() {
         return semesterRepository.findAll(Sort.by(Sort.Direction.DESC, "id"));
@@ -45,7 +48,9 @@ public class SemesterController {
         semester.setIsArchived(false);
         // Ang pinakaunang semester ay awtomatikong magiging default
         semester.setIsDefault(semesterRepository.count() == 0);
-        return ResponseEntity.ok(semesterRepository.save(semester));
+        Semester saved = semesterRepository.save(semester);
+        builtInRequirements.ensureFor(saved);
+        return ResponseEntity.ok(saved);
     }
 
     @PutMapping("/{id}")

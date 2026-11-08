@@ -96,7 +96,7 @@ export function AssignCompanyDialog({
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.address.toLowerCase().includes(q) ||
-        c.supervisorName.toLowerCase().includes(q) ||
+        (c.supervisorName ?? "").toLowerCase().includes(q) ||
         c.departments.some((d) => (d.name ?? "").toLowerCase().includes(q)),
     );
   }, [companies, search]);
@@ -258,12 +258,16 @@ export function AssignCompanyDialog({
                       <Phone className="h-4 w-4 shrink-0" />
                       {selectedCompany.contactNumber}
                     </span>
-                    <span className="inline-flex items-center gap-2">
-                      <UserRound className="h-4 w-4 shrink-0" />
-                      Immediate supervisor: {
-                        selectedCompany.supervisorName
-                      } · {selectedCompany.supervisorPosition}
-                    </span>
+                    {selectedCompany.supervisorName && (
+                      <span className="inline-flex items-center gap-2">
+                        <UserRound className="h-4 w-4 shrink-0" />
+                        Immediate supervisor:{" "}
+                        {selectedCompany.supervisorName}
+                        {selectedCompany.supervisorPosition
+                          ? ` · ${selectedCompany.supervisorPosition}`
+                          : ""}
+                      </span>
+                    )}
                   </div>
 
                   {selectedCompany.description && (
@@ -333,8 +337,9 @@ export function AssignCompanyDialog({
                         )}
 
                         <span className="text-xs text-muted-foreground">
-                          Supervisor: {d.supervisorFullname ?? "—"}
-                          {d.supervisorPosition
+                          Supervisor:{" "}
+                          {d.supervisorFullname || "Company's immediate supervisor"}
+                          {d.supervisorFullname && d.supervisorPosition
                             ? ` · ${d.supervisorPosition}`
                             : ""}
                         </span>

@@ -60,6 +60,7 @@ export const STATE_PILL: Record<WorkState, { text: string; cls: string }> = {
 /** Bilang ng gawain na wala pang nai-upload (o kailangang ayusin) */
 export function pendingCount(items: WorkCard[]) {
   return items.filter((c) => {
+    if (c.closed) return false;
     const st = workState(c.status, c.hasWork, c.dueDate);
     return st === "assigned" || st === "overdue" || st === "invalid";
   }).length;

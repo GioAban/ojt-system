@@ -1,5 +1,6 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.SupervisorResolver;
 import com.iodev.practicum.dto.CompanyRequestDtos.*;
 import com.iodev.practicum.model.Company;
 import com.iodev.practicum.model.Coordinator;
@@ -81,8 +82,11 @@ public class CompanyRequestController {
                     c.getId(), c.getName(), c.getAddress(), c.getContactNumber(), c.getLocation(),
                     approvedPerCompany.getOrDefault(c.getId(), 0) == 0,
                     d.getName(), d.getSlots(),
-                    d.getSupervisorFullname(), d.getSupervisorPosition(),
-                    d.getSupervisorEmail(), d.getSupervisorContactNumber(),
+                    // Para sa bagong company, nasa company ang supervisor; kaya dumadaan sa resolver
+                    SupervisorResolver.forDepartment(d).nameOrNull(),
+                    SupervisorResolver.forDepartment(d).positionOrNull(),
+                    SupervisorResolver.forDepartment(d).emailOrNull(),
+                    SupervisorResolver.forDepartment(d).contactNumberOrNull(),
                     s == null ? null : s.getId(), s == null ? null : s.getStudentNumber(),
                     s == null ? null : s.getFirstname(), s == null ? null : s.getLastname(),
                     s == null ? null : s.getMiddleInitial(), s == null ? null : s.getSubjectCode(),

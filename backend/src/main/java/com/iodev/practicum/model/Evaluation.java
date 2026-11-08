@@ -19,6 +19,14 @@ public class Evaluation {
     @JoinColumn(name = "semester_id", nullable = false)
     private Semester semester;
 
+    /**
+     * Ang built-in na requirement ng form na ito. Doon nakatala ang instructions, due date, attachments,
+     * status at file; dito ang mga criteria lang. Null sa lumang data.
+     */
+    @OneToOne
+    @JoinColumn(name = "document_requirement_id", unique = true)
+    private DocumentRequirement requirement;
+
     @Column(name = "score_type", nullable = false)
     private String scoreType = "percentage";
 
@@ -53,6 +61,9 @@ public class Evaluation {
 
     public Semester getSemester() { return semester; }
     public void setSemester(Semester semester) { this.semester = semester; }
+
+    public DocumentRequirement getRequirement() { return requirement; }
+    public void setRequirement(DocumentRequirement requirement) { this.requirement = requirement; }
 
     public String getScoreType() { return scoreType; }
     public void setScoreType(String scoreType) { this.scoreType = scoreType; }

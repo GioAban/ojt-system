@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function SemesterSwitcher() {
   const { semesters, semesterId, setSemesterId, loaded, error } = useSemester();
 
-  if (!loaded) return <Skeleton className="h-9 w-48" />;
+  if (!loaded) return <Skeleton className="h-9 w-32 sm:w-48" />;
 
   if (error) {
     return (
@@ -26,11 +26,12 @@ export function SemesterSwitcher() {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2">
       <CalendarDays className="hidden h-4 w-4 text-muted-foreground sm:block" />
       <NativeSelect
         aria-label="Active semester"
         title="All data on this page is for the selected semester"
+        className="max-w-[11rem] sm:max-w-xs"
         value={semesterId === null ? "" : String(semesterId)}
         onChange={(e) => setSemesterId(Number(e.target.value))}
       >

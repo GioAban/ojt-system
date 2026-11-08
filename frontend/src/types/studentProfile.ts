@@ -1,3 +1,5 @@
+import type { MaterialItem } from "@/types/requirements";
+
 export interface StudentProfile {
   id: number;
   studentNumber: string;
@@ -12,6 +14,8 @@ export interface StudentProfile {
   renderedHours: number | null;
   trainingDuration: number | null;
   mustChangePassword: boolean;
+  /** Nakilala na ang kasalukuyang bersyon ng Privacy Notice */
+  privacyAcknowledged: boolean;
 }
 
 export interface StudentCompanyDepartment {
@@ -50,6 +54,12 @@ export interface WorkCard {
   dueDate: string | null;
   status: string;
   hasWork: boolean;
+  /** Evaluation na isinara ng coordinator */
+  closed: boolean;
+  /** Sarado at walang ginawa ang student: "Not open yet" */
+  locked: boolean;
+  /** May laman lang sa Midterm at Final Evaluation; may sariling tab ang mga ito */
+  systemKey: string | null;
 }
 
 export interface StudentHomeData {
@@ -82,6 +92,12 @@ export interface WorkDetail {
   needsHours: boolean;
   hours: number | null;
   items: SubmissionItem[];
+  closed: boolean;
+  locked: boolean;
+  canComment: boolean;
+  /** Mga attachment ng coordinator */
+  materials: MaterialItem[];
+  systemKey: string | null;
 }
 
 export interface CommentItem {

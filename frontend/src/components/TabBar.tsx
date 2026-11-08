@@ -22,7 +22,7 @@ interface Props<K extends string> {
 /** Simpleng tab bar na may warning count sa bawat tab */
 export function TabBar<K extends string>({ tabs, value, onChange, size = "md", label }: Props<K>) {
   return (
-    <div role="tablist" aria-label={label} className={cn("flex gap-1 overflow-x-auto border-b", size === "sm" && "border-b-0")}>
+    <div role="tablist" aria-label={label} className={cn("flex max-w-full gap-1 overflow-x-auto overscroll-x-contain border-b [scrollbar-width:thin]", size === "sm" && "border-b-0")}>
       {tabs.map((t) => {
         const active = t.key === value;
         return (
@@ -35,8 +35,8 @@ export function TabBar<K extends string>({ tabs, value, onChange, size = "md", l
             className={cn(
               "inline-flex shrink-0 items-center gap-2 whitespace-nowrap text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               size === "md"
-                ? cn("-mb-px border-b-2 px-4 py-2.5", active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")
-                : cn("rounded-full border px-3 py-1.5", active ? "border-primary bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted"),
+                ? cn("-mb-px border-b-2 px-3 py-2.5 sm:px-4 pointer-coarse:py-3", active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")
+                : cn("rounded-full border px-3 py-1.5 pointer-coarse:py-2.5", active ? "border-primary bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted"),
             )}
           >
             {t.locked && <Lock className="h-3 w-3" aria-label="Locked" />}

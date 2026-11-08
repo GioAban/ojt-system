@@ -112,8 +112,8 @@ export default function Claim() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <div className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-sm">
+    <main className="flex min-h-dvh items-start justify-center bg-muted/30 px-4 py-8 sm:items-center sm:p-4">
+      <div className="w-full max-w-sm rounded-xl border bg-card p-5 shadow-sm sm:p-6">
         {phase === "checking" && <p className="text-center text-sm text-muted-foreground">Checking the link...</p>}
 
         {info && (phase === "open" || phase === "closed" || phase === "expired" || phase === "done") && (

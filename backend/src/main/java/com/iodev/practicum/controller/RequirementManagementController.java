@@ -14,6 +14,7 @@ import com.iodev.practicum.repository.MonthlyWeeklyReportRepository;
 import com.iodev.practicum.repository.SignedDtrRepository;
 import com.iodev.practicum.repository.SignedWeeklyReportRepository;
 import com.iodev.practicum.repository.StudentRepository;
+import com.iodev.practicum.util.EvaluationAccess;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -85,9 +86,10 @@ public class RequirementManagementController {
 
         List<DocumentRequirement> items =
                 requirementRepository.findForManagement(coordinator.getId(), semesterId, normalized, archived);
-        Map<Long, Stats> stats = documentStats(items, studentIds(coordinator, semesterId));
+        List<Student> students = studentRepository.findForTracking(coordinator.getId(), semesterId);
+        Map<Long, Stats> stats = documentStats(items, students);
 
-        return ResponseEntity.ok(items.stream().map(r -> toItem(r, stats.get(r.getId()))).toList());
+        return ResponseEntity.ok(items.stream().map(r -> toItem(r, stats.get(r.getId()), students)).toList());
     }
 
     @PutMapping("/{id}")
@@ -106,6 +108,10 @@ public class RequirementManagementController {
         String title = clean(request.title());
         if (title.isEmpty()) return ResponseEntity.badRequest().body("Title is required.");
         if (title.length() > 255) return ResponseEntity.badRequest().body("Title is too long (max 255 characters).");
+        boolean builtIn = EvaluationAccess.isBuiltIn(r);
+        if (builtIn && !title.equals(r.getTitle())) {
+            return ResponseEntity.status(409).body("Built-in requirements can't be renamed.");
+        }
 
         String instructions = request.instructions() == null ? "" : request.instructions().trim();
         if (instructions.length() > 5000) {
@@ -119,7 +125,7 @@ public class RequirementManagementController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
 
-        if (requirementRepository.titleExistsExcluding(
+        if (!builtIn && requirementRepository.titleExistsExcluding(
                 coordinator.getId(), r.getSemester().getId(), r.getType(), title, id)) {
             return ResponseEntity.status(409).body("You already have a requirement with that title in this tab.");
         }
@@ -129,8 +135,9 @@ public class RequirementManagementController {
         r.setDueDate(due);
         DocumentRequirement saved = requirementRepository.save(r);
 
-        Map<Long, Stats> stats = documentStats(List.of(saved), studentIds(coordinator, saved.getSemester().getId()));
-        return ResponseEntity.ok(toItem(saved, stats.get(saved.getId())));
+        List<Student> students = studentRepository.findForTracking(coordinator.getId(), saved.getSemester().getId());
+        Map<Long, Stats> stats = documentStats(List.of(saved), students);
+        return ResponseEntity.ok(toItem(saved, stats.get(saved.getId()), students));
     }
 
     @PatchMapping("/{id}/archive")
@@ -152,6 +159,9 @@ public class RequirementManagementController {
         DocumentRequirement r = requirementRepository.findById(id).orElse(null);
         if (r == null) return ResponseEntity.notFound().build();
         if (!r.getCoordinator().getId().equals(coordinator.getId())) return notOwner();
+        if (EvaluationAccess.isBuiltIn(r)) {
+            return ResponseEntity.status(409).body("Built-in requirements can't be archived.");
+        }
 
         if (!archived && requirementRepository.titleExistsExcluding(
                 coordinator.getId(), r.getSemester().getId(), r.getType(), r.getTitle(), id)) {
@@ -358,10 +368,11 @@ public class RequirementManagementController {
                 .collect(Collectors.toSet());
     }
 
-    private Map<Long, Stats> documentStats(List<DocumentRequirement> items, Set<Long> studentIds) {
+    private Map<Long, Stats> documentStats(List<DocumentRequirement> items, List<Student> students) {
         Map<Long, Stats> result = new HashMap<>();
         if (items.isEmpty()) return result;
 
+        Set<Long> studentIds = students.stream().map(Student::getId).collect(Collectors.toSet());
         List<Long> ids = items.stream().map(DocumentRequirement::getId).toList();
 
         // Pinakamahalagang status ng bawat student sa bawat requirement (kapareho ng Tracking)
@@ -378,7 +389,8 @@ public class RequirementManagementController {
             long checked = 0;
             long forChecking = 0;
             long invalid = 0;
-            for (String status : best.getOrDefault(r.getId(), Map.of()).values()) {
+            Map<Long, String> statuses = best.getOrDefault(r.getId(), Map.of());
+            for (String status : statuses.values()) {
                 switch (status) {
                     case "CHECKED" -> checked++;
                     case "FOR_CHECKING" -> forChecking++;
@@ -386,7 +398,12 @@ public class RequirementManagementController {
                     default -> { }
                 }
             }
-            result.put(r.getId(), new Stats(studentIds.size(), checked, forChecking, invalid));
+            // Built-in: bilang lang ang bukas para sa student o may status na, para walang maling "Not submitted"
+            long total = !EvaluationAccess.isBuiltIn(r) ? students.size() : students.stream()
+                    .filter(s -> !EvaluationAccess.isClosed(s, r)
+                            || !"ASSIGNED".equals(statuses.getOrDefault(s.getId(), "ASSIGNED")))
+                    .count();
+            result.put(r.getId(), new Stats(total, checked, forChecking, invalid));
         }
         return result;
     }
@@ -431,9 +448,14 @@ public class RequirementManagementController {
     // Mga helper
     // =====================================================================
 
-    private DocumentItem toItem(DocumentRequirement r, Stats stats) {
+    private DocumentItem toItem(DocumentRequirement r, Stats stats, List<Student> students) {
+        boolean builtIn = EvaluationAccess.isBuiltIn(r);
+        Integer open = builtIn
+                ? (int) students.stream().filter(s -> EvaluationAccess.isOpen(s, r.getSystemKey())).count()
+                : null;
         return new DocumentItem(r.getId(), r.getTitle(), r.getInstructions(), r.getDueDate(),
-                r.getCreatedAt(), Boolean.TRUE.equals(r.getIsArchived()), stats);
+                r.getCreatedAt(), Boolean.TRUE.equals(r.getIsArchived()), stats, r.getSystemKey(),
+                open, builtIn ? students.size() : null);
     }
 
     private WeeklyItem toItem(MonthlyWeeklyReport r, Stats stats) {

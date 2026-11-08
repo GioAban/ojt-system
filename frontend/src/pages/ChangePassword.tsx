@@ -40,8 +40,8 @@ export default function ChangePassword() {
   if (!loggedIn) return <Navigate to="/login" replace />;
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <form onSubmit={submit} noValidate className="flex w-full max-w-sm flex-col gap-4 rounded-xl border bg-card p-6 shadow-sm">
+    <main className="flex min-h-dvh items-start justify-center bg-muted/30 px-4 py-8 sm:items-center sm:p-4">
+      <form onSubmit={submit} noValidate className="flex w-full max-w-sm flex-col gap-4 rounded-xl border bg-card p-5 shadow-sm sm:p-6">
         <div>
           <h1 className="text-lg font-semibold">Set your own password</h1>
           <p className="text-sm text-muted-foreground">

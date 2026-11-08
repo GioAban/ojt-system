@@ -32,7 +32,7 @@ function Pill({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "inline-flex h-5 items-center rounded-full border px-2 text-[11px] font-medium",
+        "inline-flex h-5 items-center rounded-full border px-2 text-xs font-medium",
         PILL[status] ?? PILL.cancelled,
       )}
     >
@@ -116,7 +116,7 @@ export default function StudentCompanies() {
     <DashboardLayout>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Companies</h1>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Companies</h1>
           <p className="mb-6 mt-1 text-sm text-muted-foreground">
             Companies and departments where you can do your OJT.
           </p>

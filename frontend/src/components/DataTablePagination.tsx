@@ -28,7 +28,7 @@ export function DataTablePagination({
         Showing {from}–{to} of {total}
       </p>
 
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-1">
           <span className="mr-1 text-sm text-muted-foreground">Rows</span>
           {pageSizeOptions.map((size) => (

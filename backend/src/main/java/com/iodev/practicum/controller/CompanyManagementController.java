@@ -30,13 +30,13 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import com.iodev.practicum.model.DepartmentMoaFile;
 import com.iodev.practicum.repository.DepartmentMoaFileRepository;
+import com.iodev.practicum.service.SupervisorResolver;
 
 
 @RestController
 @RequestMapping("/api/coordinator/companies")
 public class CompanyManagementController {
 
-    private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final Pattern PHONE = Pattern.compile("^[0-9+()\\-\\s]{7,20}$");
 
     @Autowired
@@ -104,7 +104,12 @@ public class CompanyManagementController {
             items.add(new CompanyItem(
                     c.getId(), c.getName(), c.getAddress(), c.getLocation(), c.getContactNumber(),
                     nature == null ? null : nature.getId(), nature == null ? null : nature.getName(),
-                    c.getDescription(), c.getImsupFullname(), c.getImsupPosition(),
+                    // Blangko ang "N/A" para hindi ito lumabas sa Edit company at hindi maibalik sa pag-save
+                    c.getDescription(),
+                    SupervisorResolver.cleanOrNull(c.getImsupFullname()),
+                    SupervisorResolver.cleanOrNull(c.getImsupPosition()),
+                    SupervisorResolver.cleanOrNull(c.getImsupContactNumber()),
+                    SupervisorResolver.cleanOrNull(c.getImsupEmail()),
                     c.getImsupCompEvidIdentity(), c.getImsupCompEvidIdentityNo(),
                     Boolean.TRUE.equals(c.getIsArchived()), placed, slots, deptItems));
         }
@@ -404,8 +409,10 @@ public class CompanyManagementController {
 
         return new DepartmentItem(
                 d.getId(), d.getName(), d.getSlots() == null ? 0 : d.getSlots(), filled,
-                d.getSupervisorFullname(), d.getSupervisorPosition(),
-                d.getSupervisorContactNumber(), d.getSupervisorEmail(),
+                SupervisorResolver.cleanOrNull(d.getSupervisorFullname()),
+                SupervisorResolver.cleanOrNull(d.getSupervisorPosition()),
+                SupervisorResolver.cleanOrNull(d.getSupervisorContactNumber()),
+                SupervisorResolver.cleanOrNull(d.getSupervisorEmail()),
                 status, d.getMoaStart(), d.getMoaExpiration(),
                 Boolean.TRUE.equals(d.getIsArchived()), files);
     }
@@ -430,8 +437,6 @@ public class CompanyManagementController {
         String address = clean(r.address());
         String location = clean(r.location());
         String contact = clean(r.contactNumber());
-        String supervisor = clean(r.supervisorName());
-        String position = clean(r.supervisorPosition());
         String idType = clean(r.idType());
         String idNumber = clean(r.idNumber());
         String description = r.description() == null ? "" : r.description().trim();
@@ -444,28 +449,33 @@ public class CompanyManagementController {
         if (location.length() > 255) return "Location is too long (max 255 characters).";
         if (contact.isEmpty()) return "Contact number is required.";
         if (!PHONE.matcher(contact).matches()) return "Enter a valid contact number.";
-        if (supervisor.isEmpty()) return "The immediate supervisor's name is required.";
-        if (supervisor.length() > 255) return "The supervisor's name is too long (max 255 characters).";
-        if (position.isEmpty()) return "The supervisor's position is required.";
-        if (position.length() > 255) return "The supervisor's position is too long (max 255 characters).";
+
+        // Opsyonal ang immediate supervisor; kapag may pangalan, kailangan ang posisyon (at baliktad)
+        String error = SupervisorResolver.validate(r.supervisorName(), r.supervisorPosition(),
+                r.supervisorContactNumber(), r.supervisorEmail(), "immediate supervisor");
+        if (error != null) return error;
+
         if (idType.length() > 255 || idNumber.length() > 255) return "The supervisor ID details are too long.";
         if (description.length() > 5000) return "The description is too long (max 5000 characters).";
         return null;
     }
 
     private void applyCompany(Company company, CompanyRequest r, CompanyNature nature) {
-        String description = r.description() == null ? "" : r.description().trim();
-
         company.setName(clean(r.name()));
         company.setNature(nature);
         company.setAddress(clean(r.address()));
         company.setLocation(emptyToNull(clean(r.location())));
         company.setContactNumber(clean(r.contactNumber()));
-        company.setDescription(emptyToNull(description));
-        company.setImsupFullname(clean(r.supervisorName()));
-        company.setImsupPosition(clean(r.supervisorPosition()));
-        company.setImsupCompEvidIdentity(emptyToNull(clean(r.idType())));
-        company.setImsupCompEvidIdentityNo(emptyToNull(clean(r.idNumber())));
+        // Blangkong teksto (hindi null) dahil NOT NULL pa ang mga lumang column sa database
+        company.setImsupFullname(SupervisorResolver.clean(r.supervisorName()));
+        company.setImsupPosition(SupervisorResolver.clean(r.supervisorPosition()));
+        company.setImsupContactNumber(SupervisorResolver.cleanOrNull(r.supervisorContactNumber()));
+        company.setImsupEmail(emptyToNull(SupervisorResolver.clean(r.supervisorEmail()).toLowerCase()));
+
+        // Kapag hindi ipinadala (null), iniiwan ang dating laman para hindi mabura sa pag-edit
+        if (r.description() != null) company.setDescription(emptyToNull(r.description().trim()));
+        if (r.idType() != null) company.setImsupCompEvidIdentity(emptyToNull(clean(r.idType())));
+        if (r.idNumber() != null) company.setImsupCompEvidIdentityNo(emptyToNull(clean(r.idNumber())));
     }
 
     private String validateDepartment(DepartmentRequest r) {
@@ -483,16 +493,9 @@ public class CompanyManagementController {
         if (r.slots() == null || r.slots() < 1 || r.slots() > 500) {
             return "Slots must be a number from 1 to 500.";
         }
-        if (supervisor.isEmpty()) return "The supervisor's name is required.";
-        if (supervisor.length() > 255 || position.length() > 255) {
-            return "The supervisor's name or position is too long (max 255 characters).";
-        }
-        if (!contact.isEmpty() && !PHONE.matcher(contact).matches()) {
-            return "Enter a valid supervisor contact number.";
-        }
-        if (!email.isEmpty() && (email.length() > 255 || !EMAIL.matcher(email).matches())) {
-            return "Enter a valid supervisor email.";
-        }
+        // Opsyonal ang supervisor ng department; kapag blangko, ang immediate supervisor ng company ang gagamitin
+        String supError = SupervisorResolver.validate(supervisor, position, contact, email, "supervisor");
+        if (supError != null) return supError;
         if (!status.isEmpty() && !status.equalsIgnoreCase("APPROVED") && !status.equalsIgnoreCase("PENDING")) {
             return "Status must be APPROVED or PENDING.";
         }

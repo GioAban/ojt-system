@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Check,
   ChevronDown,
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { useSectionData, useSemesterSelection } from "@/hooks/useTracking";
 import type {
   EmployabilityLevel,
+  EvaluationKey,
   JobRelated,
   RequirementType,
   TrackingData,
@@ -41,6 +43,7 @@ import { CompleteOjtDialog } from "@/components/tracking/CompleteOjtDialog";
 import { CompletionCell } from "@/components/tracking/CompletionCell";
 import { DateCell } from "@/components/tracking/DateCell";
 import { DtrPanel } from "@/components/tracking/DtrPanel";
+import { EvaluationPanel } from "@/components/tracking/EvaluationPanel";
 import { MoaCell, type MoaValue } from "@/components/tracking/MoaCell";
 import {
   PLACEMENT_OPTIONS,
@@ -81,7 +84,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RequirementsBulkActions } from "@/components/tracking/BulkActions";
 import { useRowSelection } from "@/hooks/useRowSelection";
 
-type View = "requirements" | "weekly" | "dtr";
+type View = "requirements" | "weekly" | "dtr" | "midterm" | "final";
 type EmploymentField = "hiredDate" | "jobRelated" | "employabilityLevel";
 type PlacementFilter = "all" | "with" | "without";
 type OjtFilter = "all" | "completed" | "pending";
@@ -99,7 +102,14 @@ const VIEWS: { value: View; label: string }[] = [
   { value: "requirements", label: "Requirements" },
   { value: "weekly", label: "Weekly reports" },
   { value: "dtr", label: "DTR" },
+  { value: "midterm", label: "Midterm evaluation" },
+  { value: "final", label: "Final evaluation" },
 ];
+
+const EVALUATION_KEYS: Partial<Record<View, EvaluationKey>> = {
+  midterm: "MIDTERM_EVALUATION",
+  final: "FINAL_EVALUATION",
+};
 
 const COL = { requirement: 74, moa: 112, status: 132, completion: 300 };
 
@@ -282,7 +292,7 @@ function StatusCell({ status, title, pending, onChange, onView }: StatusCellProp
         title={tooltip}
         aria-label={`${tooltip}. Change status`}
         className={cn(
-          "inline-flex h-6 w-full items-center justify-between gap-0.5 rounded-md border px-1.5 text-[10px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "inline-flex h-6 w-full items-center justify-between gap-0.5 rounded-md border px-1.5 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
           config.chipClass,
           pending && "opacity-40",
         )}
@@ -328,8 +338,10 @@ export default function Tracking() {
     semesterId,
   } = useSemesterSelection();
 
-  const [type, setType] = useState<RequirementType>("initial");
-  const [view, setView] = useState<View>("requirements");
+  // Galing sa "Open Tracking" ng Requirements page: diretso sa evaluation
+  const requested = useLocation().state as { type?: RequirementType; view?: View } | null;
+  const [type, setType] = useState<RequirementType>(requested?.type ?? "initial");
+  const [view, setView] = useState<View>(requested?.view ?? "requirements");
   const [reviewTarget, setReviewTarget] = useState<{
     student: TrackingStudent;
     requirement: TrackingRequirement;
@@ -379,6 +391,7 @@ export default function Tracking() {
   const showCompletion = COMPLETION_TYPES.includes(type);
   const hasSubViews = type === REPORTS_TAB;
   const activeView: View = hasSubViews ? view : "requirements";
+  const evaluationKey = EVALUATION_KEYS[activeView];
 
   const { data, error, loading, reload, refresh, update } =
     useSectionData<TrackingData>("/coordinator/tracking", semesterId, { type });
@@ -750,22 +763,24 @@ export default function Tracking() {
             </Button>
           )}
 
-          <Button
-            type="button"
-            disabled={
-              semesterId === null || (activeView === "requirements" && loading)
-            }
-            onClick={openAdd}
-          >
-            <Plus className="h-4 w-4" />
-            {addLabel}
-          </Button>
+          {!evaluationKey && (
+            <Button
+              type="button"
+              disabled={
+                semesterId === null || (activeView === "requirements" && loading)
+              }
+              onClick={openAdd}
+            >
+              <Plus className="h-4 w-4" />
+              {addLabel}
+            </Button>
+          )}
         </div>
       </div>
 
       {hasSubViews && (
         <nav
-          className="mb-4 flex gap-1 border-b"
+          className="mb-4 flex gap-1 overflow-x-auto overscroll-x-contain border-b"
           aria-label="Pre-deployment sections"
         >
           {VIEWS.map((v) => (
@@ -777,7 +792,7 @@ export default function Tracking() {
                 setPage(1);
               }}
               className={cn(
-                "-mb-px border-b-2 px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                "-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium outline-none pointer-coarse:py-3 transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 activeView === v.value
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground",
@@ -795,14 +810,16 @@ export default function Tracking() {
         </Alert>
       )}
 
-      <RequirementsBulkActions
-        selection={selection}
-        filteredTotal={filtered.length}
-        requirements={data?.requirements ?? []}
-        showPlacement={showPlacement}
-        showCompletion={showCompletion}
-        onDone={refresh}
-      />
+      {!evaluationKey && (
+        <RequirementsBulkActions
+          selection={selection}
+          filteredTotal={filtered.length}
+          requirements={data?.requirements ?? []}
+          showPlacement={showPlacement}
+          showCompletion={showCompletion}
+          onDone={refresh}
+        />
+      )}
 
       {noSemester && (
         <div className="isolate rounded-xl border bg-card">
@@ -829,6 +846,15 @@ export default function Tracking() {
           search={search}
           addOpen={addMonthOpen}
           onAddOpenChange={setAddMonthOpen}
+        />
+      )}
+
+      {semesterId !== null && evaluationKey && (
+        <EvaluationPanel
+          key={evaluationKey}
+          semesterId={semesterId}
+          evaluationKey={evaluationKey}
+          search={search}
         />
       )}
 
@@ -889,7 +915,7 @@ export default function Tracking() {
                 <span
                   key={status}
                   className={cn(
-                    "inline-flex h-5 items-center rounded-md border px-1.5 text-[10px] font-medium",
+                    "inline-flex h-5 items-center rounded-md border px-1.5 text-[11px] font-medium",
                     chipClass,
                   )}
                 >
@@ -923,7 +949,7 @@ export default function Tracking() {
 
           {error && (
             <Alert variant="destructive" className="mb-3">
-              <AlertDescription className="flex items-center justify-between gap-4">
+              <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                 {error}
                 <Button variant="outline" size="sm" onClick={reload}>
                   Retry
@@ -1040,7 +1066,7 @@ export default function Tracking() {
                                 : `${r.title} · open the students' submissions`
                             }
                           >
-                            <span className="block text-[10px] font-medium leading-tight">
+                            <span className="block text-[11px] font-medium leading-tight">
                               {r.title}
                             </span>
                           </HeaderLink>
@@ -1278,7 +1304,7 @@ export default function Tracking() {
                                 {s.predictedLevel ? (
                                   <span
                                     className={cn(
-                                      "inline-flex h-5 items-center rounded-md border px-1.5 text-[10px] font-medium",
+                                      "inline-flex h-5 items-center rounded-md border px-1.5 text-[11px] font-medium",
                                       LEVEL_CONFIG[s.predictedLevel].chipClass,
                                     )}
                                   >

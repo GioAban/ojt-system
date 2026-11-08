@@ -1,13 +1,21 @@
 import { useState, type FormEvent } from "react";
 import api from "@/lib/api";
-import { EMAIL_PATTERN, PHONE_PATTERN } from "@/lib/company";
+import {
+  cleanSupervisorText,
+  clearSupervisorError,
+  validateSupervisor,
+  type SupervisorErrors,
+  type SupervisorValue,
+} from "@/lib/company";
 import { getErrorMessage } from "@/lib/errors";
 import type { DepartmentItem } from "@/types/company";
 import { Field } from "@/components/companies/parts";
+import { SupervisorFields } from "@/components/companies/SupervisorFields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -36,16 +44,14 @@ export function DepartmentFormDialog({
   const [slots, setSlots] = useState(
     department ? String(department.slots) : "1",
   );
-  const [supervisor, setSupervisor] = useState(
-    department?.supervisorFullname ?? "",
-  );
-  const [position, setPosition] = useState(
-    department?.supervisorPosition ?? "",
-  );
-  const [contact, setContact] = useState(
-    department?.supervisorContactNumber ?? "",
-  );
-  const [email, setEmail] = useState(department?.supervisorEmail ?? "");
+  // Opsyonal; kapag blangko, ang immediate supervisor ng company ang gagamitin
+  const [supervisor, setSupervisor] = useState<SupervisorValue>({
+    name: cleanSupervisorText(department?.supervisorFullname),
+    position: cleanSupervisorText(department?.supervisorPosition),
+    contact: cleanSupervisorText(department?.supervisorContactNumber),
+    email: cleanSupervisorText(department?.supervisorEmail),
+  });
+  const [supErrors, setSupErrors] = useState<SupervisorErrors>({});
   const [moaStart, setMoaStart] = useState(
     (department?.moaStart ?? "").slice(0, 10),
   );
@@ -83,13 +89,6 @@ export function DepartmentFormDialog({
       next.slots = `${placed} student(s) are already placed here, so slots can't be lower than that.`;
     }
 
-    if (!supervisor.trim()) next.supervisor = "Enter the supervisor's name.";
-    if (contact.trim() && !PHONE_PATTERN.test(contact.trim())) {
-      next.contact =
-        "Use digits, spaces, +, -, or parentheses (7 to 20 characters).";
-    }
-    if (email.trim() && !EMAIL_PATTERN.test(email.trim()))
-      next.email = "Enter a valid email address.";
     if (moaStart && moaEnd && moaEnd < moaStart)
       next.moaEnd = "The MOA can't end before it starts.";
 
@@ -101,8 +100,10 @@ export function DepartmentFormDialog({
     setFormError("");
 
     const found = validate();
+    const foundSup = validateSupervisor(supervisor);
     setErrors(found);
-    if (Object.keys(found).length > 0) return;
+    setSupErrors(foundSup);
+    if (Object.keys(found).length > 0 || Object.keys(foundSup).length > 0) return;
 
     setSaving(true);
 
@@ -110,10 +111,10 @@ export function DepartmentFormDialog({
       // Hindi lahat ng company ay may department, kaya N/A ang itatabi kapag walang pangalan
       name: name.trim() || "N/A",
       slots: Number(slots),
-      supervisorFullname: supervisor.trim(),
-      supervisorPosition: position.trim(),
-      supervisorContactNumber: contact.trim(),
-      supervisorEmail: email.trim(),
+      supervisorFullname: supervisor.name.trim(),
+      supervisorPosition: supervisor.position.trim(),
+      supervisorContactNumber: supervisor.contact.trim(),
+      supervisorEmail: supervisor.email.trim(),
       // Ang idinagdag o ine-edit ng coordinator ay approved; ang pending ay nasa Requests tab
       status: "APPROVED",
       moaStart: moaStart || null,
@@ -144,10 +145,10 @@ export function DepartmentFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent size="3xl">
         <form
           onSubmit={handleSubmit}
-          className="flex flex-col gap-5"
+          className="flex min-h-0 flex-1 flex-col"
           noValidate
         >
           <DialogHeader>
@@ -161,153 +162,99 @@ export function DepartmentFormDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field
-              label="Department name (optional)"
-              htmlFor="dep-name"
-              error={errors.name}
-              className="sm:col-span-2"
-            >
-              <Input
-                id="dep-name"
-                maxLength={255}
-                placeholder="e.g. MIS Office (leave blank if none, saved as N/A)"
-                aria-invalid={Boolean(errors.name)}
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  clear("name");
-                }}
-                autoFocus
-              />
-            </Field>
-
-            <Field
-              label="Slots"
-              htmlFor="dep-slots"
-              required
-              error={errors.slots}
-              hint={placed > 0 ? `${placed} placed` : "Students it can take"}
-            >
-              <Input
-                id="dep-slots"
-                inputMode="numeric"
-                aria-invalid={Boolean(errors.slots)}
-                value={slots}
-                onChange={(e) => {
-                  setSlots(e.target.value.replace(/\D/g, ""));
-                  clear("slots");
-                }}
-              />
-            </Field>
-          </div>
-
-          <section className="flex flex-col gap-4 border-t pt-5">
-            <div>
-              <h3 className="text-sm font-medium">Supervisor</h3>
-              <p className="text-xs text-muted-foreground">
-                Who supervises the students in this department.
-              </p>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
+          <DialogBody className="flex flex-col gap-6">
+            <div className="grid gap-4 sm:grid-cols-3">
               <Field
-                label="Full name"
-                htmlFor="dep-sup"
+                label="Department name (optional)"
+                htmlFor="dep-name"
+                error={errors.name}
+                className="sm:col-span-2"
+              >
+                <Input
+                  id="dep-name"
+                  maxLength={255}
+                  placeholder="e.g. MIS Office (leave blank if none, saved as N/A)"
+                  aria-invalid={Boolean(errors.name)}
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    clear("name");
+                  }}
+                  autoFocus
+                />
+              </Field>
+
+              <Field
+                label="Slots"
+                htmlFor="dep-slots"
                 required
-                error={errors.supervisor}
+                error={errors.slots}
+                hint={placed > 0 ? `${placed} placed` : "Students it can take"}
               >
                 <Input
-                  id="dep-sup"
-                  maxLength={255}
-                  aria-invalid={Boolean(errors.supervisor)}
-                  value={supervisor}
+                  id="dep-slots"
+                  inputMode="numeric"
+                  aria-invalid={Boolean(errors.slots)}
+                  value={slots}
                   onChange={(e) => {
-                    setSupervisor(e.target.value);
-                    clear("supervisor");
-                  }}
-                />
-              </Field>
-
-              <Field label="Position" htmlFor="dep-pos">
-                <Input
-                  id="dep-pos"
-                  maxLength={255}
-                  value={position}
-                  onChange={(e) => setPosition(e.target.value)}
-                />
-              </Field>
-
-              <Field
-                label="Contact number"
-                htmlFor="dep-contact"
-                error={errors.contact}
-              >
-                <Input
-                  id="dep-contact"
-                  inputMode="tel"
-                  aria-invalid={Boolean(errors.contact)}
-                  value={contact}
-                  onChange={(e) => {
-                    setContact(e.target.value);
-                    clear("contact");
-                  }}
-                />
-              </Field>
-
-              <Field label="Email" htmlFor="dep-email" error={errors.email}>
-                <Input
-                  id="dep-email"
-                  type="email"
-                  aria-invalid={Boolean(errors.email)}
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    clear("email");
+                    setSlots(e.target.value.replace(/\D/g, ""));
+                    clear("slots");
                   }}
                 />
               </Field>
             </div>
-          </section>
 
-          <section className="flex flex-col gap-4 border-t pt-5">
-            <div>
-              <h3 className="text-sm font-medium">Memorandum of Agreement</h3>
-              <p className="text-xs text-muted-foreground">
-                The period the agreement is valid.
-              </p>
-            </div>
+            <SupervisorFields
+              idPrefix="dep-sup"
+              title="Supervisor"
+              description="Who supervises the students in this department. Leave it blank to use the company's immediate supervisor. If you enter a name, also enter the position."
+              value={supervisor}
+              errors={supErrors}
+              onChange={(key, v) => {
+                setSupervisor((prev) => ({ ...prev, [key]: v }));
+                setSupErrors((prev) => clearSupervisorError(prev, key));
+              }}
+            />
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="MOA start" htmlFor="dep-moa-start">
-                <Input
-                  id="dep-moa-start"
-                  type="date"
-                  value={moaStart}
-                  onChange={(e) => setMoaStart(e.target.value)}
-                />
-              </Field>
+            <section className="flex flex-col gap-4 border-t pt-5">
+              <div>
+                <h3 className="text-sm font-medium">Memorandum of Agreement</h3>
+                <p className="text-xs text-muted-foreground">
+                  The period the agreement is valid.
+                </p>
+              </div>
 
-              <Field
-                label="MOA expiration"
-                htmlFor="dep-moa-end"
-                error={errors.moaEnd}
-              >
-                <Input
-                  id="dep-moa-end"
-                  type="date"
-                  min={moaStart || undefined}
-                  value={moaEnd}
-                  onChange={(e) => {
-                    setMoaEnd(e.target.value);
-                    clear("moaEnd");
-                  }}
-                />
-              </Field>
-            </div>
-          </section>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="MOA start" htmlFor="dep-moa-start">
+                  <Input
+                    id="dep-moa-start"
+                    type="date"
+                    value={moaStart}
+                    onChange={(e) => setMoaStart(e.target.value)}
+                  />
+                </Field>
 
-          {formError && <p className="text-sm text-destructive">{formError}</p>}
+                <Field
+                  label="MOA expiration"
+                  htmlFor="dep-moa-end"
+                  error={errors.moaEnd}
+                >
+                  <Input
+                    id="dep-moa-end"
+                    type="date"
+                    min={moaStart || undefined}
+                    value={moaEnd}
+                    onChange={(e) => {
+                      setMoaEnd(e.target.value);
+                      clear("moaEnd");
+                    }}
+                  />
+                </Field>
+              </div>
+            </section>
+
+            {formError && <p className="text-sm text-destructive">{formError}</p>}
+          </DialogBody>
 
           <DialogFooter>
             <Button

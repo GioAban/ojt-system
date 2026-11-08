@@ -372,7 +372,7 @@ export function WeeklyPanel({
           <span
             key={status}
             className={cn(
-              "inline-flex h-5 items-center rounded-md border px-1.5 text-[10px] font-medium",
+              "inline-flex h-5 items-center rounded-md border px-1.5 text-[11px] font-medium",
               STATUS_CONFIG[status].chipClass,
             )}
           >
@@ -403,7 +403,7 @@ export function WeeklyPanel({
 
       {error && (
         <Alert variant="destructive" className="mb-3">
-          <AlertDescription className="flex items-center justify-between gap-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {error}
             <Button variant="outline" size="sm" onClick={reload}>
               Retry
@@ -473,7 +473,7 @@ export function WeeklyPanel({
                         to={`/coordinator/document-requirements/weekly/${c.id}/submissions`}
                         title={`${formatPeriod(c.dateFrom, c.dateTo)} · open the students' submissions`}
                       >
-                        <span className="block text-[10px] font-medium leading-tight">
+                        <span className="block text-[11px] font-medium leading-tight">
                           {formatPeriod(c.dateFrom, c.dateTo)}
                         </span>
                       </HeaderLink>

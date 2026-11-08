@@ -4,7 +4,9 @@ import jakarta.persistence.*;
 import java.sql.Timestamp;
 
 @Entity
-@Table(name = "document_requirements")
+@Table(name = "document_requirements", uniqueConstraints = @UniqueConstraint(
+        name = "uk_document_requirements_system_key",
+        columnNames = {"coordinator_id", "semester_id", "system_key"}))
 public class DocumentRequirement {
 
     @Id
@@ -35,6 +37,10 @@ public class DocumentRequirement {
 
     @Column(name = "is_archived", nullable = false)
     private Boolean isArchived = false;
+
+    /** May laman lang sa mga built-in (tingnan ang EvaluationAccess). Null sa karaniwang requirement. */
+    @Column(name = "system_key", length = 40)
+    private String systemKey;
 
     @org.hibernate.annotations.CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -72,6 +78,9 @@ public class DocumentRequirement {
 
     public Boolean getIsArchived() { return isArchived; }
     public void setIsArchived(Boolean isArchived) { this.isArchived = isArchived; }
+
+    public String getSystemKey() { return systemKey; }
+    public void setSystemKey(String systemKey) { this.systemKey = systemKey; }
 
     public Timestamp getCreatedAt() { return createdAt; }
     public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }

@@ -43,7 +43,7 @@ export function CoordinatorDirectory() {
 
   return (
     <section className="border-t">
-      <div className="mx-auto max-w-6xl px-4 py-14">
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:py-14">
         <h2 className="text-2xl font-semibold tracking-tight">Your OJT coordinators and staff</h2>
         <p className="mt-2 max-w-2xl text-muted-foreground">
           No account yet? Reach out to the coordinator of your program. They will enroll you and give you access.

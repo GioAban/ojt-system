@@ -16,7 +16,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-[10px] font-medium",
+        "inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-[11px] font-medium",
         STATUS_CHIP[status] ?? "text-muted-foreground",
       )}
     >

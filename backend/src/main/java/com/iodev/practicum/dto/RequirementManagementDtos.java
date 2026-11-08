@@ -11,7 +11,9 @@ public final class RequirementManagementDtos {
 
     public record DocumentItem(
             Long id, String title, String instructions, Timestamp dueDate,
-            Timestamp createdAt, boolean archived, Stats stats) {}
+            Timestamp createdAt, boolean archived, Stats stats, String systemKey,
+            /* Built-in lang: ilan ang bukas sa kabuuang aktibong student; null sa iba */
+            Integer openCount, Integer studentCount) {}
 
     public record WeeklyItem(
             Long id, LocalDate dateFrom, LocalDate dateTo, Timestamp dueDate,

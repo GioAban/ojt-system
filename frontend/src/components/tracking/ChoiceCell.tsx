@@ -45,7 +45,7 @@ export function ChoiceCell<T extends string>({
           "inline-flex h-6 w-full cursor-not-allowed items-center gap-1.5 px-1.5 text-[11px]",
           selected
             ? cn(
-                "rounded-md border text-[10px] font-medium opacity-60",
+                "rounded-md border text-[11px] font-medium opacity-60",
                 selected.chipClass,
               )
             : "text-muted-foreground/50",
@@ -64,7 +64,7 @@ export function ChoiceCell<T extends string>({
         title={`${label}: ${selected ? selected.label : "not set"}`}
         aria-label={`${label}: ${selected ? selected.label : "not set"}. Change`}
         className={cn(
-          "inline-flex h-6 w-full items-center justify-between gap-0.5 rounded-md border px-1.5 text-[10px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "inline-flex h-6 w-full items-center justify-between gap-0.5 rounded-md border px-1.5 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
           selected
             ? selected.chipClass
             : "border-dashed border-primary/40 bg-primary/5 text-primary hover:bg-primary/10",

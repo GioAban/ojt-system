@@ -277,7 +277,7 @@ public class RequirementFilesController {
         return ResponseEntity.ok(new SubmissionsResponse(
                 requirement.getId(), requirement.getTitle(), requirement.getInstructions(),
                 requirement.getDueDate(), Boolean.TRUE.equals(requirement.getIsArchived()),
-                requirement.getType(), materials, rows));
+                requirement.getType(), materials, rows, requirement.getSystemKey()));
     }
 
     @GetMapping("/{id}/submissions/{attachmentId}/file")

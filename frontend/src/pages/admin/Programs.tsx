@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+import { stackedTable } from "@/lib/responsive";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
@@ -218,7 +220,7 @@ export default function Programs() {
 
       {loadError && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription className="flex items-center justify-between gap-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {loadError}
             <Button variant="outline" size="sm" onClick={() => void loadAll()}>
               Retry
@@ -260,7 +262,7 @@ export default function Programs() {
             </NativeSelect>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {filters.map((f) => (
               <Button
                 key={f.value}
@@ -278,7 +280,7 @@ export default function Programs() {
           </div>
         </div>
 
-        <Table>
+        <Table className={cn(stackedTable, "max-md:px-3 max-md:pb-3")}>
           <TableHeader>
             <TableRow>
               <TableHead>Program</TableHead>
@@ -304,7 +306,7 @@ export default function Programs() {
               <TableRow>
                 <TableCell
                   colSpan={7}
-                  className="py-10 text-center text-muted-foreground"
+                  className="max-md:text-center! py-10 text-center text-muted-foreground"
                 >
                   No programs found.
                 </TableCell>
@@ -314,7 +316,7 @@ export default function Programs() {
             {!loading &&
               pageRows.map((p) => (
                 <TableRow key={p.id}>
-                  <TableCell>
+                  <TableCell className="max-md:pr-10!">
                     <div className="flex flex-col gap-1">
                       <span className="font-medium">{p.name}</span>
                       <span>
@@ -322,25 +324,25 @@ export default function Programs() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label="College">
                     <Badge variant="secondary">{p.collegeAbbreviation}</Badge>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell data-label="Program head" className="text-muted-foreground">
                     {p.programHead}
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label="Training hours">
                     {p.trainingDuration.toLocaleString("en-PH", {
                       maximumFractionDigits: 2,
                     })}{" "}
                     hrs
                   </TableCell>
-                  <TableCell>{p.coordinatorsCount}</TableCell>
-                  <TableCell>
+                  <TableCell data-label="Coordinators">{p.coordinatorsCount}</TableCell>
+                  <TableCell data-label="Status">
                     <Badge variant={p.isArchived ? "outline" : "secondary"}>
                       {p.isArchived ? "Archived" : "Active"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="max-md:absolute max-md:top-2 max-md:right-2 max-md:w-auto! max-md:p-0! text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         className={buttonVariants({

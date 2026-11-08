@@ -21,8 +21,8 @@ export interface CompanyOption {
   contactNumber: string;
   nature: string | null;
   description: string | null;
-  supervisorName: string;
-  supervisorPosition: string;
+  supervisorName: string | null;
+  supervisorPosition: string | null;
   departments: DepartmentOption[];
 }
 

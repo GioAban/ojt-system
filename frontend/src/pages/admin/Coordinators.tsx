@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+import { stackedTable } from "@/lib/responsive";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
@@ -227,7 +229,7 @@ export default function Coordinators() {
 
       {loadError && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription className="flex items-center justify-between gap-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {loadError}
             <Button variant="outline" size="sm" onClick={() => void loadAll()}>
               Retry
@@ -269,7 +271,7 @@ export default function Coordinators() {
             </NativeSelect>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {filters.map((f) => (
               <Button
                 key={f.value}
@@ -287,7 +289,7 @@ export default function Coordinators() {
           </div>
         </div>
 
-        <Table>
+        <Table className={cn(stackedTable, "max-md:px-3 max-md:pb-3")}>
           <TableHeader>
             <TableRow>
               <TableHead>Coordinator</TableHead>
@@ -313,7 +315,7 @@ export default function Coordinators() {
               <TableRow>
                 <TableCell
                   colSpan={7}
-                  className="py-10 text-center text-muted-foreground"
+                  className="max-md:text-center! py-10 text-center text-muted-foreground"
                 >
                   No coordinators found.
                 </TableCell>
@@ -323,7 +325,7 @@ export default function Coordinators() {
             {!loading &&
               pageRows.map((c) => (
                 <TableRow key={c.id}>
-                  <TableCell>
+                  <TableCell className="max-md:pr-10!">
                     <div className="flex flex-col">
                       <span className="font-medium">
                         {c.fullname}
@@ -336,29 +338,29 @@ export default function Coordinators() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell data-label="Employee no." className="text-muted-foreground">
                     {c.employeeNumber}
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label="Program">
                     <div className="flex items-center gap-1">
                       <Badge variant="outline">{c.programAbbreviation}</Badge>
                       <Badge variant="secondary">{c.collegeAbbreviation}</Badge>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label="Type">
                     <Badge
                       variant={c.type === "ADMIN" ? "default" : "secondary"}
                     >
                       {c.type === "ADMIN" ? "Admin" : "Staff"}
                     </Badge>
                   </TableCell>
-                  <TableCell>{c.studentsCount}</TableCell>
-                  <TableCell>
+                  <TableCell data-label="Students">{c.studentsCount}</TableCell>
+                  <TableCell data-label="Status">
                     <Badge variant={c.isArchived ? "outline" : "secondary"}>
                       {c.isArchived ? "Archived" : "Active"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="max-md:absolute max-md:top-2 max-md:right-2 max-md:w-auto! max-md:p-0! text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         className={buttonVariants({

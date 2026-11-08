@@ -26,7 +26,8 @@ public final class CompanyManagementDtos {
     public record CompanyItem(
             Long id, String name, String address, String location, String contactNumber,
             Long natureId, String nature, String description,
-            String supervisorName, String supervisorPosition, String idType, String idNumber,
+            String supervisorName, String supervisorPosition,
+            String supervisorContactNumber, String supervisorEmail, String idType, String idNumber,
             boolean archived, long placed, int slots, List<DepartmentItem> departments) {}
 
     public record NatureItem(Long id, String name) {}
@@ -36,6 +37,7 @@ public final class CompanyManagementDtos {
     public record CompanyRequest(
             Long semesterId, String name, String address, String location, String contactNumber,
             Long natureId, String description, String supervisorName, String supervisorPosition,
+            String supervisorContactNumber, String supervisorEmail,
             String idType, String idNumber) {}
 
     public record DepartmentRequest(

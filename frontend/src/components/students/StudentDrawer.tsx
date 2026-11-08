@@ -41,7 +41,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section className="border-t pt-4">
       <h3 className="mb-3 text-sm font-semibold">{title}</h3>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3">{children}</dl>
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-3 min-[400px]:grid-cols-2">{children}</dl>
     </section>
   );
 }

@@ -155,7 +155,7 @@ export function ApplicationsTab({ semesterId, visible, onPendingChange, onChange
                 </div>
                 <span
                   className={cn(
-                    "inline-flex h-5 items-center rounded-md border px-1.5 text-[10px] font-medium capitalize",
+                    "inline-flex h-5 items-center rounded-md border px-1.5 text-xs font-medium capitalize",
                     CHIP[a.status],
                   )}
                 >

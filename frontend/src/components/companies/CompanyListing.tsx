@@ -11,6 +11,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { stackedTable } from "@/lib/responsive";
 import { isApproved } from "@/lib/company";
 import type { CompanyItem, DepartmentItem, ListingRow } from "@/types/company";
 import {
@@ -66,7 +67,7 @@ export function CompanyListing({
   onManageMoa,
 }: CompanyListingProps) {
   return (
-    <Table className="min-w-[1200px] text-sm">
+    <Table className={cn("text-sm md:min-w-[1200px]", stackedTable)}>
       <TableHeader>
         <TableRow>
           <TableHead className="w-10">#</TableHead>
@@ -90,12 +91,12 @@ export function CompanyListing({
 
           return (
             <TableRow key={row.key} className={cn(dimmed && "opacity-60")}>
-              <TableCell className={cn(CELL, "text-muted-foreground")}>
+              <TableCell className={cn(CELL, "text-muted-foreground max-md:hidden")}>
                 {offset + index + 1}
               </TableCell>
 
               {/* Company */}
-              <TableCell className={CELL}>
+              <TableCell className={cn(CELL, "max-md:pr-10!")}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{company.name}</span>
                   {company.nature && (
@@ -113,7 +114,7 @@ export function CompanyListing({
               </TableCell>
 
               {/* Department */}
-              <TableCell className={CELL}>
+              <TableCell data-label="Department" className={CELL}>
                 {d ? (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">
@@ -143,14 +144,14 @@ export function CompanyListing({
               </TableCell>
 
               {/* Supervisor */}
-              <TableCell className={CELL}>
+              <TableCell data-label="Supervisor" className={CELL}>
                 {d ? (
                   <div className="flex flex-col gap-1 text-xs">
                     <span className="inline-flex items-center gap-1.5 text-sm">
                       <UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      {d.supervisorFullname ?? "—"}
+                      {d.supervisorFullname || "Company's immediate supervisor"}
                     </span>
-                    {d.supervisorPosition && (
+                    {d.supervisorFullname && d.supervisorPosition && (
                       <span className="text-muted-foreground">
                         {d.supervisorPosition}
                       </span>
@@ -172,11 +173,13 @@ export function CompanyListing({
                   <div className="flex flex-col gap-1 text-xs">
                     <span className="inline-flex items-center gap-1.5 text-sm">
                       <UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      {company.supervisorName}
+                      {company.supervisorName || "—"}
                     </span>
-                    <span className="text-muted-foreground">
-                      {company.supervisorPosition}
-                    </span>
+                    {company.supervisorPosition && (
+                      <span className="text-muted-foreground">
+                        {company.supervisorPosition}
+                      </span>
+                    )}
                     <span className="text-muted-foreground">
                       Company supervisor
                     </span>
@@ -185,7 +188,7 @@ export function CompanyListing({
               </TableCell>
 
               {/* MOA */}
-              <TableCell className={CELL}>
+              <TableCell data-label="MOA" className={CELL}>
                 {d ? (
                   <MoaInfo start={d.moaStart} expiration={d.moaExpiration} />
                 ) : (
@@ -194,7 +197,7 @@ export function CompanyListing({
               </TableCell>
 
               {/* Signed MOA */}
-              <TableCell className={CELL}>
+              <TableCell data-label="Signed MOA" className={CELL}>
                 {!d || (frozen && fileCount === 0) ? (
                   <span className="text-muted-foreground">—</span>
                 ) : (
@@ -214,7 +217,7 @@ export function CompanyListing({
               </TableCell>
 
               {/* Slots */}
-              <TableCell className={CELL}>
+              <TableCell data-label="Slots" className={CELL}>
                 {d ? (
                   <SlotsMeter filled={d.filled} slots={d.slots} />
                 ) : (
@@ -223,7 +226,7 @@ export function CompanyListing({
               </TableCell>
 
               {/* Actions */}
-              <TableCell className="text-right align-top">
+              <TableCell className="text-right align-top max-md:absolute max-md:top-2 max-md:right-2 max-md:w-auto! max-md:p-0!">
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     className={buttonVariants({

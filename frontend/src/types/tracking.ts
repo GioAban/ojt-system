@@ -37,6 +37,27 @@ export interface TrackingStudent {
   statuses: Record<string, TrackingStatus>;
 }
 
+export type EvaluationKey = "MIDTERM_EVALUATION" | "FINAL_EVALUATION";
+
+export interface EvaluationStudent {
+  id: number;
+  studentNumber: string;
+  firstname: string;
+  lastname: string;
+  middleInitial: string | null;
+  subjectCode: string;
+  status: TrackingStatus;
+  open: boolean;
+}
+
+export interface EvaluationTrackingData {
+  semesterId: number;
+  key: EvaluationKey;
+  /** Null lang kung hindi pa ito nagawa para sa semester */
+  requirement: TrackingRequirement | null;
+  students: EvaluationStudent[];
+}
+
 export interface TrackingData {
   semesterId: number;
   type: RequirementType;

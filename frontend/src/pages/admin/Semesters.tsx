@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+import { stackedTable } from "@/lib/responsive";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
@@ -222,7 +224,7 @@ export default function Semesters() {
 
       {loadError && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription className="flex items-center justify-between gap-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {loadError}
             <Button
               variant="outline"
@@ -250,7 +252,7 @@ export default function Semesters() {
             />
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {filters.map((f) => (
               <Button
                 key={f.value}
@@ -268,7 +270,7 @@ export default function Semesters() {
           </div>
         </div>
 
-        <Table>
+        <Table className={cn(stackedTable, "max-md:px-3 max-md:pb-3")}>
           <TableHeader>
             <TableRow>
               <TableHead>Semester</TableHead>
@@ -291,7 +293,7 @@ export default function Semesters() {
               <TableRow>
                 <TableCell
                   colSpan={4}
-                  className="py-10 text-center text-muted-foreground"
+                  className="max-md:text-center! py-10 text-center text-muted-foreground"
                 >
                   No semesters found.
                 </TableCell>
@@ -301,7 +303,7 @@ export default function Semesters() {
             {!loading &&
               pageRows.map((s) => (
                 <TableRow key={s.id}>
-                  <TableCell className="font-medium">
+                  <TableCell className="max-md:pr-10! font-medium">
                     <div className="flex items-center gap-2">
                       {s.semester}
                       {s.isDefault && (
@@ -312,15 +314,15 @@ export default function Semesters() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell data-label="Status">
                     <Badge variant={s.isArchived ? "outline" : "secondary"}>
                       {s.isArchived ? "Archived" : "Active"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell data-label="Created" className="text-muted-foreground">
                     {formatDate(s.createdAt)}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="max-md:absolute max-md:top-2 max-md:right-2 max-md:w-auto! max-md:p-0! text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         className={buttonVariants({

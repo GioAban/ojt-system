@@ -1,5 +1,6 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.SupervisorResolver;
 import com.iodev.practicum.dto.CompanyInfoDtos.CompanyInfoEdit;
 import com.iodev.practicum.dto.CompanyInfoDtos.CompanyInfoEditResult;
 import com.iodev.practicum.dto.CompanyInfoDtos.CompanyInfoResponse;
@@ -58,7 +59,8 @@ public class CompanyInfoController {
                     s.getMiddleInitial(), s.getSubjectCode(),
                     c.getId(), c.getName(), d.getId(), d.getName(),
                     c.getAddress(), c.getContactNumber(), c.getLocation(),
-                    d.getSupervisorFullname(), d.getSupervisorPosition(), startDate(s)));
+                    SupervisorResolver.forDepartment(d).nameOrNull(),
+                    SupervisorResolver.forDepartment(d).positionOrNull(), startDate(s)));
         }
 
         return ResponseEntity.ok(new CompanyInfoResponse(semesterId, rows));

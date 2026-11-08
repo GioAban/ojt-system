@@ -85,7 +85,7 @@ export function CompanyCard({
               )}
               {company.archived && <ArchivedBadge />}
               {pending > 0 && !company.archived && (
-                <span className="inline-flex h-5 items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                <span className="inline-flex h-5 items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
                   {pending} pending
                 </span>
               )}
@@ -175,13 +175,29 @@ export function CompanyCard({
               </p>
               <span className="inline-flex items-center gap-2">
                 <UserRound className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span>
-                  {company.supervisorName}
-                  <span className="block text-xs text-muted-foreground">
-                    {company.supervisorPosition}
+                {company.supervisorName ? (
+                  <span>
+                    {company.supervisorName}
+                    <span className="block text-xs text-muted-foreground">
+                      {company.supervisorPosition}
+                    </span>
                   </span>
-                </span>
+                ) : (
+                  <span className="text-muted-foreground">None set</span>
+                )}
               </span>
+              {company.supervisorContactNumber && (
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                  <Phone className="h-3.5 w-3.5 shrink-0" />
+                  {company.supervisorContactNumber}
+                </span>
+              )}
+              {company.supervisorEmail && (
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                  <Mail className="h-3.5 w-3.5 shrink-0" />
+                  {company.supervisorEmail}
+                </span>
+              )}
               {(company.idType || company.idNumber) && (
                 <span className="text-xs text-muted-foreground">
                   {company.idType ?? "ID"}: {company.idNumber ?? "—"}
@@ -253,8 +269,8 @@ export function CompanyCard({
                       <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
                         <span className="inline-flex items-center gap-1.5">
                           <UserRound className="h-3 w-3 shrink-0" />
-                          {d.supervisorFullname ?? "—"}
-                          {d.supervisorPosition
+                          {d.supervisorFullname || "Company's immediate supervisor"}
+                          {d.supervisorFullname && d.supervisorPosition
                             ? ` · ${d.supervisorPosition}`
                             : ""}
                         </span>

@@ -20,6 +20,7 @@ import HostTraining from "@/pages/coordinator/HostTraining";
 import Students from "@/pages/coordinator/Students";
 import Claim from "@/pages/Claim";
 import CompanyRequestPublic from "@/pages/CompanyRequestPublic";
+import PrivacyNotice from "@/pages/PrivacyNotice";
 import ChangePassword from "@/pages/ChangePassword";
 import StudentCompanies from "@/pages/student/Companies";
 import ProfilePage from "@/pages/Profile";
@@ -29,6 +30,8 @@ import StudentMyCompany from "@/pages/student/Company";
 import CoordinatorAnnouncements from "@/pages/coordinator/Announcements";
 import StudentAnnouncements from "@/pages/student/Announcements";
 import StudentProgress from "@/pages/student/Progress";
+import CoordinatorReports from "@/pages/coordinator/Reports";
+import CoordinatorReportEditor from "@/pages/coordinator/ReportEditor";
 
 function App() {
   return (
@@ -247,6 +250,36 @@ function App() {
               }
             />
             <Route
+              path="/coordinator/reports"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["COORDINATOR"]}>
+                    <CoordinatorReports />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/coordinator/reports/:type"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["COORDINATOR"]}>
+                    <CoordinatorReportEditor />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/coordinator/reports/:type/:id"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["COORDINATOR"]}>
+                    <CoordinatorReportEditor />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/student/company"
               element={
                 <ProtectedRoute>
@@ -259,6 +292,7 @@ function App() {
           </Route>
           <Route path="/claim" element={<Claim />} />
           <Route path="/hte-request" element={<CompanyRequestPublic />} />
+          <Route path="/privacy" element={<PrivacyNotice />} />
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="*" element={<Navigate to="/login" replace />} />

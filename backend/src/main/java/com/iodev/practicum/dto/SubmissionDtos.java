@@ -20,7 +20,7 @@ public final class SubmissionDtos {
     public record SubmissionsResponse(
             Long requirementId, String title, String instructions, Timestamp dueDate,
             boolean archived, String type, List<MaterialDto> materials,
-            List<SubmissionStudentDto> students) {}
+            List<SubmissionStudentDto> students, String systemKey) {}
 
     public record LinkRequest(String url, String name) {}
 

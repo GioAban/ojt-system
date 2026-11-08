@@ -35,6 +35,9 @@ public class AuthController {
     @Autowired
     private LoginIdentifierResolver loginIdentifierResolver;
 
+    @Autowired
+    private com.iodev.practicum.service.BuiltInRequirementService builtInRequirements;
+
     @PostMapping("/register")
     @Transactional
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
@@ -63,7 +66,8 @@ public class AuthController {
         coordinator.setType(CoordinatorType.STAFF);
         coordinator.setEmployeeNumber(request.getEmployeeNumber());
         coordinator.setProfessionalTitles(request.getProfessionalTitles());
-        coordinatorRepository.save(coordinator);
+        coordinator = coordinatorRepository.save(coordinator);
+        builtInRequirements.ensureFor(coordinator);
 
         String token = jwtUtil.generateToken(user.getEmail());
         return ResponseEntity.ok(new AuthResponse(token, user.getEmail(), user.getFullname(), user.getRoleAs().name(), coordinator.getType().name()));

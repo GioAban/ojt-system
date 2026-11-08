@@ -29,3 +29,11 @@ OJT System login Email: gio@gmail.com Temporary password: TBYuLSAqYU Log in at: 
 
 20243992@gmail.com
 20243992AE
+
+To Run:
+cd D:\practicum\backend
+$env:DB_URL="jdbc:mysql://localhost:3306/practicum"
+$env:DB_USERNAME="root"
+$env:DB_PASSWORD="localdev123"
+$env:STORAGE_LOCAL_DIR="uploads/requirements"
+.\mvnw spring-boot:run

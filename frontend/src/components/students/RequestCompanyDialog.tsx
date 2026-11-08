@@ -3,11 +3,21 @@ import { AlertTriangle } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { notify } from "@/lib/notify";
+import {
+  EMPTY_SUPERVISOR,
+  clearSupervisorError,
+  hasSupervisor,
+  validateSupervisor,
+  type SupervisorErrors,
+  type SupervisorValue,
+} from "@/lib/company";
+import { SupervisorFields } from "@/components/companies/SupervisorFields";
 import type { CheckResult, MatchCompany } from "@/types/companyApplications";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -29,10 +39,6 @@ const EMPTY = {
   contactNumber: "",
   location: "",
   departmentName: "",
-  supervisorFullname: "",
-  supervisorPosition: "",
-  supervisorEmail: "",
-  supervisorContactNumber: "",
 };
 
 function Field({
@@ -61,10 +67,17 @@ export function RequestCompanyDialog({ open, onOpenChange, presetCompany, onSent
   const [check, setCheck] = useState<CheckResult | null>(null);
   const [different, setDifferent] = useState(false);
   const [sending, setSending] = useState(false);
+  // Immediate supervisor: sa company kapag bagong company, sa department kapag dati nang company
+  const [supervisor, setSupervisor] = useState<SupervisorValue>(EMPTY_SUPERVISOR);
+  const [supErrors, setSupErrors] = useState<SupervisorErrors>({});
+  const [permission, setPermission] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setForm(EMPTY);
+    setSupervisor(EMPTY_SUPERVISOR);
+    setSupErrors({});
+    setPermission(false);
     setCheck(null);
     setDifferent(false);
     setExisting(presetCompany ?? null);
@@ -104,13 +117,25 @@ export function RequestCompanyDialog({ open, onOpenChange, presetCompany, onSent
     !form.departmentName.trim() ||
     (!existing && (!form.companyName.trim() || !form.address.trim() || !form.contactNumber.trim()));
   const blocked = sameDept || (similarCompany && !different);
+  // Kailangan ang pahintulot ng supervisor kapag may inilagay na kahit isang detalye nito
+  const supervisorGiven = hasSupervisor(supervisor);
+  const needsPermission = supervisorGiven && !permission;
 
   async function submit() {
+    const found = validateSupervisor(supervisor);
+    setSupErrors(found);
+    if (Object.keys(found).length > 0 || needsPermission) return;
+
     setSending(true);
     try {
       await api.post("/student/company/requests", {
         existingCompanyId: existing?.id ?? null,
         ...form,
+        supervisorFullname: supervisor.name.trim(),
+        supervisorPosition: supervisor.position.trim(),
+        supervisorEmail: supervisor.email.trim(),
+        supervisorContactNumber: supervisor.contact.trim(),
+        supervisorPermission: supervisorGiven ? permission : false,
         confirmDifferent: different,
       });
       notify.success("Request sent. Your coordinator will review it.");
@@ -125,7 +150,7 @@ export function RequestCompanyDialog({ open, onOpenChange, presetCompany, onSent
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent size="2xl">
         <DialogHeader>
           <DialogTitle>Request a company or department</DialogTitle>
           <DialogDescription>
@@ -134,7 +159,7 @@ export function RequestCompanyDialog({ open, onOpenChange, presetCompany, onSent
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3">
+        <DialogBody className="flex flex-col gap-3">
           {existing ? (
             <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
               <span>
@@ -169,21 +194,38 @@ export function RequestCompanyDialog({ open, onOpenChange, presetCompany, onSent
             <Input value={form.departmentName} maxLength={255} onChange={(e) => set("departmentName", e.target.value)} />
           </Field>
 
-          <p className="mt-1 text-xs font-medium text-muted-foreground">Supervisor (optional)</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Full name">
-              <Input value={form.supervisorFullname} onChange={(e) => set("supervisorFullname", e.target.value)} />
-            </Field>
-            <Field label="Position">
-              <Input value={form.supervisorPosition} onChange={(e) => set("supervisorPosition", e.target.value)} />
-            </Field>
-            <Field label="Email">
-              <Input type="email" value={form.supervisorEmail} onChange={(e) => set("supervisorEmail", e.target.value)} />
-            </Field>
-            <Field label="Contact number">
-              <Input value={form.supervisorContactNumber} onChange={(e) => set("supervisorContactNumber", e.target.value)} />
-            </Field>
+          <div className="mt-2">
+            <SupervisorFields
+              idPrefix="req-sup"
+              title="Immediate supervisor"
+              description={
+                existing
+                  ? "Who will supervise you in this department, if you know. If you enter a name, also enter the position."
+                  : "The company's supervisor for OJT students, if you know. If you enter a name, also enter the position."
+              }
+              value={supervisor}
+              errors={supErrors}
+              onChange={(key, v) => {
+                setSupervisor((prev) => ({ ...prev, [key]: v }));
+                setSupErrors((prev) => clearSupervisorError(prev, key));
+              }}
+            />
           </div>
+
+          {supervisorGiven && (
+            <label className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 shrink-0 pointer-coarse:size-5"
+                checked={permission}
+                onChange={(e) => setPermission(e.target.checked)}
+              />
+              <span>
+                I have the supervisor&apos;s permission to share these contact details.{" "}
+                <span className="text-destructive">*</span>
+              </span>
+            </label>
+          )}
 
           {matches.length > 0 && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
@@ -241,13 +283,18 @@ export function RequestCompanyDialog({ open, onOpenChange, presetCompany, onSent
               )}
             </div>
           )}
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" disabled={missing || blocked || sending} onClick={() => void submit()}>
+          <Button
+            type="button"
+            disabled={missing || blocked || needsPermission || sending}
+            title={needsPermission ? "Confirm the supervisor's permission first." : undefined}
+            onClick={() => void submit()}
+          >
             {sending ? "Sending…" : "Send request"}
           </Button>
         </DialogFooter>

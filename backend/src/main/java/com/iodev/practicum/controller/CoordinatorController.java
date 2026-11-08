@@ -49,6 +49,9 @@ public class CoordinatorController {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private com.iodev.practicum.service.BuiltInRequirementService builtInRequirements;
+
     @GetMapping
     public List<CoordinatorResponse> getAll() {
         Map<Long, Long> counts = new HashMap<>();
@@ -103,7 +106,9 @@ public class CoordinatorController {
         coordinator.setEmployeeNumber(employeeNumber);
         coordinator.setProfessionalTitles(emptyToNull(clean(request.getProfessionalTitles())));
 
-        return ResponseEntity.ok(toResponse(coordinatorRepository.save(coordinator), 0L));
+        Coordinator saved = coordinatorRepository.save(coordinator);
+        builtInRequirements.ensureFor(saved);
+        return ResponseEntity.ok(toResponse(saved, 0L));
     }
 
     @PutMapping("/{id}")

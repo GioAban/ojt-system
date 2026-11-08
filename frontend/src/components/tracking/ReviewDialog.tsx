@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ExternalLink, FileText, Loader2 } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
@@ -12,6 +12,7 @@ import {
   STATUS_CONFIG,
   STATUS_ORDER,
 } from "@/components/tracking/statusConfig";
+import { EvaluationReview, type EvaluationReviewHandle } from "@/components/evaluation/EvaluationReview";
 import { PrivateComments } from "@/components/requirements/PrivateComments";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,8 @@ interface Props {
   initialStatus: TrackingStatus;
   /** Mensahe sa itaas, hal. kulang ang hours */
   hint?: string;
+  /** Midterm o Final Evaluation: ipakita ang signed copy at ang mga score */
+  evaluation?: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: (result: CellResult) => void;
 }
@@ -53,9 +56,11 @@ export function ReviewDialog({
   itemLabel,
   initialStatus,
   hint,
+  evaluation = false,
   onOpenChange,
   onSaved,
 }: Props) {
+  const evaluationRef = useRef<EvaluationReviewHandle>(null);
   const [detail, setDetail] = useState<CellDetail | null>(null);
   const [loadError, setLoadError] = useState("");
   const [status, setStatus] = useState<TrackingStatus>(initialStatus);
@@ -127,6 +132,8 @@ export function ReviewDialog({
 
     setSaving(true);
     try {
+      // Ang mga iwinasto muna, para hindi mawala kapag naging Checked (naka-lock) na ito
+      await evaluationRef.current?.saveIfDirty();
       const res = await api.patch<CellResult>("/coordinator/review/cell", {
         kind,
         studentId,
@@ -153,13 +160,27 @@ export function ReviewDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={evaluation ? "max-h-[92vh] overflow-y-auto sm:max-w-6xl" : "sm:max-w-lg"}>
         <DialogHeader>
           <DialogTitle>{KIND_TITLE[kind]}: {itemLabel}</DialogTitle>
           <DialogDescription>{studentName}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
+          {evaluation ? (
+            <>
+              {loading && <Skeleton className="h-96 w-full" />}
+              {loadError && <p className="text-sm text-destructive">{loadError}</p>}
+              {detail && (
+                <EvaluationReview
+                  ref={evaluationRef}
+                  requirementId={itemId}
+                  studentId={studentId}
+                  status={detail.status}
+                />
+              )}
+            </>
+          ) : (
           <section aria-label="Submitted file" className="flex flex-col gap-2">
             <h3 className="text-sm font-medium">Submitted file</h3>
             {loading && <Skeleton className="h-10 w-full" />}
@@ -190,6 +211,7 @@ export function ReviewDialog({
               </div>
             ))}
           </section>
+          )}
 
           {kind === "dtr" && (
             <section className="flex flex-col gap-1.5">

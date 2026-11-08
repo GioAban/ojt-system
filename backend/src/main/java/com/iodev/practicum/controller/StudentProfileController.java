@@ -6,6 +6,7 @@ import com.iodev.practicum.dto.StudentProfileDtos.CompanyEntry;
 import com.iodev.practicum.dto.StudentProfileDtos.HomeResponse;
 import com.iodev.practicum.dto.StudentProfileDtos.WorkCard;
 import com.iodev.practicum.repository.SubmissionFileRepository;
+import com.iodev.practicum.service.PrivacySettings;
 import com.iodev.practicum.service.StudentWorkService;
 import com.iodev.practicum.dto.StudentProfileDtos.Profile;
 import com.iodev.practicum.model.Company;
@@ -46,6 +47,7 @@ public class StudentProfileController {
     @Autowired private DepartmentRepository departmentRepository;
     @Autowired private SubmissionFileRepository submissionFiles;
     @Autowired private StudentWorkService workService;
+    @Autowired private PrivacySettings privacySettings;
 
     @GetMapping("/profile")
     @Transactional(readOnly = true)
@@ -65,7 +67,8 @@ public class StudentProfileController {
                 d == null ? null : d.getCompany().getName(),
                 d == null ? null : d.getName(),
                 s.getRenderedHours(), requiredHours(s, coordinator),
-                Boolean.TRUE.equals(s.getMustChangePassword())));
+                Boolean.TRUE.equals(s.getMustChangePassword()),
+                !privacySettings.needsAcknowledgement(s.getPrivacyAckVersion())));
     }
 
     /**
@@ -87,7 +90,7 @@ public class StudentProfileController {
             boolean hasWork = worked.contains(r.scope() + ":" + r.id());
             cards.add(new WorkCard(r.scope(), r.id(), r.title(), r.subtitle(), r.type(), r.instructions(),
                     r.dueDate() == null ? null : r.dueDate().toInstant().toString(),
-                    StudentWorkService.statusLabel(r.statusKey()), hasWork));
+                    StudentWorkService.statusLabel(r.statusKey()), hasWork, r.closed(), r.locked(), r.systemKey()));
         }
         return ResponseEntity.ok(new HomeResponse(status, cards));
     }

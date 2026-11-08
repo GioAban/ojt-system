@@ -105,7 +105,7 @@ export function ImportDialog({ open, semesterId, onOpenChange, onImported }: Pro
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+      <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Import students</DialogTitle>
           <DialogDescription>
@@ -143,7 +143,7 @@ export function ImportDialog({ open, semesterId, onOpenChange, onImported }: Pro
               )}
               .
             </p>
-            <div className="max-h-80 overflow-auto rounded-lg border">
+            <div className="max-h-80 overflow-auto overscroll-contain rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>

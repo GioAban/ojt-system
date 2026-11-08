@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+import { stackedTable } from "@/lib/responsive";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
@@ -206,7 +208,7 @@ export default function Colleges() {
 
       {loadError && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription className="flex items-center justify-between gap-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {loadError}
             <Button
               variant="outline"
@@ -234,7 +236,7 @@ export default function Colleges() {
             />
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {filters.map((f) => (
               <Button
                 key={f.value}
@@ -252,7 +254,7 @@ export default function Colleges() {
           </div>
         </div>
 
-        <Table>
+        <Table className={cn(stackedTable, "max-md:px-3 max-md:pb-3")}>
           <TableHeader>
             <TableRow>
               <TableHead>College</TableHead>
@@ -276,7 +278,7 @@ export default function Colleges() {
               <TableRow>
                 <TableCell
                   colSpan={5}
-                  className="py-10 text-center text-muted-foreground"
+                  className="max-md:text-center! py-10 text-center text-muted-foreground"
                 >
                   No colleges found.
                 </TableCell>
@@ -286,7 +288,7 @@ export default function Colleges() {
             {!loading &&
               pageRows.map((c) => (
                 <TableRow key={c.id}>
-                  <TableCell>
+                  <TableCell className="max-md:pr-10!">
                     <div className="flex items-center gap-3">
                       <CollegeLogo path={c.logo} label={c.abbreviation} />
                       <div className="flex items-center gap-2">
@@ -295,16 +297,16 @@ export default function Colleges() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell data-label="Dean" className="text-muted-foreground">
                     {c.dean}
                   </TableCell>
-                  <TableCell>{c.programsCount}</TableCell>
-                  <TableCell>
+                  <TableCell data-label="Active programs">{c.programsCount}</TableCell>
+                  <TableCell data-label="Status">
                     <Badge variant={c.isArchived ? "outline" : "secondary"}>
                       {c.isArchived ? "Archived" : "Active"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="max-md:absolute max-md:top-2 max-md:right-2 max-md:w-auto! max-md:p-0! text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         className={buttonVariants({

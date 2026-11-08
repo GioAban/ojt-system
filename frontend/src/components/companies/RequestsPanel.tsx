@@ -55,7 +55,7 @@ function Field({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
   return (
     <div className="min-w-0">
-      <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <dt className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </dt>
       <dd className="break-words text-sm">{value}</dd>
@@ -222,7 +222,7 @@ export function RequestsPanel({ semesterId, data, loading, onChanged }: Props) {
               </div>
               <span
                 className={cn(
-                  "inline-flex h-5 items-center rounded-md border px-1.5 text-[10px] font-medium",
+                  "inline-flex h-5 items-center rounded-md border px-1.5 text-xs font-medium",
                   CHIP[r.status],
                 )}
               >

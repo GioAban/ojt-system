@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useLocation,
   useNavigate,
@@ -35,6 +35,7 @@ import type {
   SubmissionsData,
 } from "@/types/requirements";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { EvaluationReview, type EvaluationReviewHandle } from "@/components/evaluation/EvaluationReview";
 import { MaterialChip } from "@/components/requirements/MaterialChip";
 import {
   StatusPairDialog,
@@ -337,6 +338,7 @@ export default function RequirementSubmissions({
   const location = useLocation();
   const [searchParams] = useSearchParams();
 
+  const evaluationRef = useRef<EvaluationReviewHandle>(null);
   const [tab, setTab] = useState<Tab>("work");
   const [reloadToken, setReloadToken] = useState(0);
   const [state, setState] = useState<LoadState | null>(null);
@@ -345,6 +347,16 @@ export default function RequirementSubmissions({
     const id = Number(searchParams.get("student"));
     return Number.isFinite(id) && id > 0 ? id : null;
   });
+  // Kung nakabukas na ang page at may pinindot na abiso, sundin ang bagong ?student=
+  const [prevNavKey, setPrevNavKey] = useState(location.key);
+  if (prevNavKey !== location.key) {
+    setPrevNavKey(location.key);
+    const id = Number(searchParams.get("student"));
+    if (Number.isFinite(id) && id > 0) {
+      setSelectedId(id);
+      setTab("work");
+    }
+  }
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [pendingId, setPendingId] = useState<number | null>(null);
@@ -809,7 +821,7 @@ export default function RequirementSubmissions({
 
   return (
     <DashboardLayout wide>
-      <div className="mb-4 flex items-start gap-3">
+      <div className="mb-4 flex flex-wrap items-start gap-x-3 gap-y-2">
         <Button
           type="button"
           variant="ghost"
@@ -819,8 +831,8 @@ export default function RequirementSubmissions({
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-bold tracking-tight">
+        <div className="min-w-0 flex-1">
+          <h1 className="break-words text-xl font-bold tracking-tight sm:truncate sm:text-2xl">
             {heading}
           </h1>
           {subtitle && (
@@ -847,7 +859,7 @@ export default function RequirementSubmissions({
       </div>
 
       {kind === "document" && (
-        <nav className="mb-4 flex gap-1 border-b" aria-label="Sections">
+        <nav className="mb-4 flex gap-1 overflow-x-auto overscroll-x-contain border-b" aria-label="Sections">
           {(
             [
               { value: "instructions", label: "Instructions" },
@@ -859,7 +871,7 @@ export default function RequirementSubmissions({
               type="button"
               onClick={() => setTab(t.value)}
               className={cn(
-                "-mb-px border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                "-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium outline-none sm:px-4 pointer-coarse:py-3 transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 tab === t.value
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground",
@@ -873,7 +885,7 @@ export default function RequirementSubmissions({
 
       {current?.error && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription className="flex items-center justify-between gap-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {current.error}
             <Button
               variant="outline"
@@ -987,7 +999,7 @@ export default function RequirementSubmissions({
               </label>
             )}
 
-            <div className="max-h-[60vh] overflow-y-auto">
+            <div className="max-h-[40dvh] overflow-y-auto overscroll-contain lg:max-h-[60vh]">
               {filtered.length === 0 && (
                 <p className="p-4 text-center text-sm text-muted-foreground">
                   No students found.
@@ -1172,7 +1184,7 @@ export default function RequirementSubmissions({
                             <span className="flex min-w-0 items-center gap-2 pr-6">
                               <Initials
                                 student={s}
-                                className="h-7 w-7 text-[11px]"
+                                className="h-7 w-7 text-xs"
                               />
                               <span className="truncate text-sm">
                                 {nameOf(s)}
@@ -1249,12 +1261,19 @@ export default function RequirementSubmissions({
                       aria-label="Status"
                       value={selected.status}
                       disabled={pendingId === selected.studentId}
-                      onChange={(e) =>
-                        void changeStatus(
-                          selected,
-                          e.target.value as TrackingStatus,
-                        )
-                      }
+                      onChange={async (e) => {
+                        const next = e.target.value as TrackingStatus;
+                        // Ang mga iwinasto muna, para hindi mawala kapag naging Checked (naka-lock) na ito
+                        try {
+                          await evaluationRef.current?.saveIfDirty();
+                        } catch (err) {
+                          notify.error(
+                            getErrorMessage(err, "Couldn't save the scores."),
+                          );
+                          return;
+                        }
+                        void changeStatus(selected, next);
+                      }}
                     >
                       {STATUS_ORDER.map((status) => (
                         <NativeSelectOption key={status} value={status}>
@@ -1306,7 +1325,15 @@ export default function RequirementSubmissions({
                 <p className="mb-2 mt-5 text-xs font-medium text-muted-foreground">
                   Student's work
                 </p>
-                {selected.files.length === 0 ? (
+                {data?.systemKey ? (
+                  <EvaluationReview
+                    key={selected.studentId}
+                    ref={evaluationRef}
+                    requirementId={data.requirementId}
+                    studentId={selected.studentId}
+                    status={selected.status}
+                  />
+                ) : selected.files.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     {isTurnedIn(kind, selected)
                       ? "No file is attached. This was recorded by you."
@@ -1357,6 +1384,7 @@ export default function RequirementSubmissions({
           dueDate={data.dueDate}
           dateFrom={data.dateFrom ? String(data.dateFrom) : null}
           dateTo={data.dateTo ? String(data.dateTo) : null}
+          builtIn={Boolean(data.systemKey)}
           onOpenChange={setEditOpen}
           onSaved={() => setReloadToken((t) => t + 1)}
         />

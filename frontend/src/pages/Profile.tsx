@@ -44,7 +44,7 @@ function StudentProfileView() {
 
   return (
     <DashboardLayout>
-      <h1 className="mb-6 text-2xl font-bold tracking-tight">Profile</h1>
+      <h1 className="mb-6 text-xl font-bold tracking-tight sm:text-2xl">Profile</h1>
       {error && <p className="text-sm text-red-500">{error}</p>}
       {profile && (
         <Card>

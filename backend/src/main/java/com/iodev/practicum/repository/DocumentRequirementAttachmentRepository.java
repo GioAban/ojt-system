@@ -24,4 +24,9 @@ public interface DocumentRequirementAttachmentRepository extends JpaRepository<D
             + "where a.documentRequirement.id in :requirementIds and a.student.id in :studentIds order by a.id")
     List<DocumentRequirementAttachment> findForBulk(@Param("requirementIds") Collection<Long> requirementIds,
                                                     @Param("studentIds") Collection<Long> studentIds);
+
+    /** student id, requirement id, status, updated at */
+    @Query("select a.student.id, a.documentRequirement.id, a.status, a.updatedAt from DocumentRequirementAttachment a "
+            + "where a.documentRequirement.id in :requirementIds")
+    List<Object[]> findTimeline(@Param("requirementIds") Collection<Long> requirementIds);
 }

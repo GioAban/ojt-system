@@ -7,6 +7,7 @@ import type { RequirementKind } from "@/types/requirements";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -38,6 +39,10 @@ interface Props {
   dueDate?: string | null;
   dateFrom?: string | null;
   dateTo?: string | null;
+  /** Hindi mapapalitan ang pamagat ng built-in */
+  builtIn?: boolean;
+  /** Pagbukas ng evaluation: sine-save muna ang laman, saka ito tatakbo */
+  openAction?: { label: string; note: string; run: () => Promise<void> };
   onOpenChange: (open: boolean) => void;
   /** Tinatawag pagkatapos mag-save (o kapag may binago sa attachments), para mag-reload ang page */
   onSaved: () => void;
@@ -67,6 +72,8 @@ export function EditRequirementDialog({
   dueDate,
   dateFrom,
   dateTo,
+  builtIn = false,
+  openAction,
   onOpenChange,
   onSaved,
 }: Props) {
@@ -128,7 +135,8 @@ export function EditRequirementDialog({
     setSaving(true);
     try {
       await api.put(base, body);
-      notify.success("Requirement updated.");
+      if (openAction) await openAction.run();
+      else notify.success("Requirement updated.");
       onSaved();
       onOpenChange(false);
     } catch (err) {
@@ -186,157 +194,163 @@ export function EditRequirementDialog({
     }
   }
 
-  const heading =
+  const heading = builtIn ? "Requirement" :
     kind === "document" ? "Edit requirement" : kind === "weekly" ? "Edit weekly report" : "Edit DTR";
 
   return (
     <Dialog open onOpenChange={close}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent size="2xl">
         <DialogHeader>
           <DialogTitle>{heading}</DialogTitle>
           <DialogDescription>
             Changes show up for your students right away. Their work stays as it is.
+            {openAction && ` ${openAction.note}`}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
-          {kind === "document" && (
-            <>
-              <div>
-                <label className={FIELD_LABEL} htmlFor="req-title">Title</label>
-                <Input id="req-title" value={name} maxLength={255} onChange={(e) => setName(e.target.value)} />
+        <DialogBody className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
+            {kind === "document" && (
+              <>
+                <div>
+                  <label className={FIELD_LABEL} htmlFor="req-title">Title</label>
+                  <Input id="req-title" value={name} maxLength={255} disabled={builtIn} onChange={(e) => setName(e.target.value)} />
+                  {builtIn && (
+                    <p className="mt-1 text-xs text-muted-foreground">Built-in requirements can't be renamed.</p>
+                  )}
+                </div>
+                <div>
+                  <label className={FIELD_LABEL} htmlFor="req-instructions">Instructions</label>
+                  <Textarea
+                    id="req-instructions"
+                    rows={5}
+                    maxLength={5000}
+                    value={text}
+                    placeholder="Tell your students what to submit and how."
+                    onChange={(e) => setText(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
+            {kind === "weekly" && (
+              <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
+                <div>
+                  <label className={FIELD_LABEL} htmlFor="req-from">Week starts</label>
+                  <Input id="req-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+                </div>
+                <div>
+                  <label className={FIELD_LABEL} htmlFor="req-to">Week ends</label>
+                  <Input id="req-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+                </div>
               </div>
+            )}
+
+            {kind === "dtr" && (
               <div>
-                <label className={FIELD_LABEL} htmlFor="req-instructions">Instructions</label>
-                <Textarea
-                  id="req-instructions"
-                  rows={5}
-                  maxLength={5000}
-                  value={text}
-                  placeholder="Tell your students what to submit and how."
-                  onChange={(e) => setText(e.target.value)}
-                />
-              </div>
-            </>
-          )}
-
-          {kind === "weekly" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={FIELD_LABEL} htmlFor="req-from">Week starts</label>
-                <Input id="req-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-              </div>
-              <div>
-                <label className={FIELD_LABEL} htmlFor="req-to">Week ends</label>
-                <Input id="req-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-              </div>
-            </div>
-          )}
-
-          {kind === "dtr" && (
-            <div>
-              <label className={FIELD_LABEL} htmlFor="req-month">Month</label>
-              <NativeSelect id="req-month" value={month} onChange={(e) => setMonth(e.target.value)}>
-                {MONTHS.map((m) => (
-                  <NativeSelectOption key={m} value={m}>{m}</NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-          )}
-
-          <div>
-            <label className={FIELD_LABEL} htmlFor="req-due">Due date (optional)</label>
-            <div className="flex items-center gap-2">
-              <Input id="req-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} className="max-w-48" />
-              {due && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setDue("")}>
-                  Clear
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {kind === "document" && (
-            <div className="border-t pt-4">
-              <p className={FIELD_LABEL}>Attachments</p>
-
-              {materials === null ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              ) : materials.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No attachments yet.</p>
-              ) : (
-                <ul className="flex flex-col gap-1.5">
-                  {materials.map((m) => (
-                    <li key={m.id} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                      {m.kind === "LINK" ? (
-                        <Link2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      ) : (
-                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      )}
-                      <span className="min-w-0 flex-1 truncate">{m.name}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Remove ${m.name}`}
-                        disabled={busy}
-                        onClick={() => void remove(m.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </li>
+                <label className={FIELD_LABEL} htmlFor="req-month">Month</label>
+                <NativeSelect id="req-month" value={month} onChange={(e) => setMonth(e.target.value)}>
+                  {MONTHS.map((m) => (
+                    <NativeSelectOption key={m} value={m}>{m}</NativeSelectOption>
                   ))}
-                </ul>
-              )}
-
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => void upload(e.target.files)}
-                />
-                <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
-                  <Upload className="mr-1 h-3.5 w-3.5" /> Upload files
-                </Button>
+                </NativeSelect>
               </div>
+            )}
 
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                <Input
-                  placeholder="https://… (link)"
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                />
-                <Input
-                  placeholder="Name (optional)"
-                  value={linkName}
-                  onChange={(e) => setLinkName(e.target.value)}
-                  className="sm:max-w-40"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy || !/^https?:\/\/\S+$/i.test(linkUrl.trim())}
-                  onClick={() => void addLink()}
-                >
-                  <Paperclip className="mr-1 h-3.5 w-3.5" /> Add
-                </Button>
+            <div>
+              <label className={FIELD_LABEL} htmlFor="req-due">Due date (optional)</label>
+              <div className="flex items-center gap-2">
+                <Input id="req-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} className="max-w-48" />
+                {due && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setDue("")}>
+                    Clear
+                  </Button>
+                )}
               </div>
             </div>
-          )}
 
-          {error && (
-            <p role="alert" className="text-sm text-destructive">{error}</p>
-          )}
-        </div>
+            {kind === "document" && (
+              <div className="border-t pt-4">
+                <p className={FIELD_LABEL}>Attachments</p>
+
+                {materials === null ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : materials.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No attachments yet.</p>
+                ) : (
+                  <ul className="flex flex-col gap-1.5">
+                    {materials.map((m) => (
+                      <li key={m.id} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                        {m.kind === "LINK" ? (
+                          <Link2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        ) : (
+                          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        )}
+                        <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Remove ${m.name}`}
+                          disabled={busy}
+                          onClick={() => void remove(m.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => void upload(e.target.files)}
+                  />
+                  <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
+                    <Upload className="mr-1 h-3.5 w-3.5" /> Upload files
+                  </Button>
+                </div>
+
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    placeholder="https://… (link)"
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Name (optional)"
+                    value={linkName}
+                    onChange={(e) => setLinkName(e.target.value)}
+                    className="sm:max-w-40"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy || !/^https?:\/\/\S+$/i.test(linkUrl.trim())}
+                    onClick={() => void addLink()}
+                  >
+                    <Paperclip className="mr-1 h-3.5 w-3.5" /> Add
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <p role="alert" className="text-sm text-destructive">{error}</p>
+            )}
+          </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button type="button" variant="ghost" disabled={saving || busy} onClick={() => close(false)}>
             Cancel
           </Button>
           <Button type="button" disabled={saving || busy} onClick={() => void save()}>
-            {saving ? "Saving…" : "Save changes"}
+            {saving ? "Saving…" : openAction ? openAction.label : builtIn ? "Save" : "Save changes"}
           </Button>
         </DialogFooter>
       </DialogContent>

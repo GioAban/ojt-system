@@ -4,6 +4,7 @@ import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { stackedActions, stackedTable, stackedTableWrap } from "@/lib/responsive";
 import { DEFAULT_PASSWORD_RULE, defaultPassword, validEmail } from "@/lib/students";
 import type { AcceptAllResult, AccountRow, AccountStatus, EnrollmentLinkState } from "@/types/students";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -379,15 +380,15 @@ export function AccountsTab({ semesterId, visible, onPendingChange, onChanged }:
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:flex-none">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, ID, email..."
               aria-label="Search accounts"
-              className="w-60 pl-8"
+              className="w-full pl-8 sm:w-60"
             />
           </div>
           {counts.pending > 0 && (
@@ -449,8 +450,8 @@ export function AccountsTab({ semesterId, visible, onPendingChange, onChanged }:
               : "No accounts match your filters."}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border bg-card">
-          <Table style={{ minWidth: 880 }}>
+        <div className={cn("overflow-x-auto rounded-xl border bg-card", stackedTableWrap)}>
+          <Table className={cn("md:min-w-[880px]", stackedTable)}>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10 px-3">
@@ -492,7 +493,7 @@ export function AccountsTab({ semesterId, visible, onPendingChange, onChanged }:
                       <div className="font-medium">{displayName(r)}</div>
                       <div className="text-xs text-muted-foreground">{r.studentNumber}{r.year ? ` · ${r.year}` : ""}</div>
                     </TableCell>
-                    <TableCell className="px-1 py-1 align-middle">
+                    <TableCell data-label="Email" className="px-1 py-1 align-middle max-md:[&_span]:px-0 max-md:[&>div]:px-0">
                       {r.status === "active" ? (
                         <ConfirmedEmailCell value={r.email} name={displayName(r)} onSave={(v) => saveEmail(r, v)} />
                       ) : r.status === "none" && creating === r.studentId ? (
@@ -519,7 +520,7 @@ export function AccountsTab({ semesterId, visible, onPendingChange, onChanged }:
                         <span className="px-2 text-sm">{r.email ?? <span className="text-muted-foreground">—</span>}</span>
                       )}
                     </TableCell>
-                    <TableCell className="px-3 py-2 align-middle">
+                    <TableCell data-label="Status" className="px-3 py-2 align-middle">
                       <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_CLASS[r.status])}>
                         {STATUS_LABEL[r.status]}
                       </span>
@@ -527,9 +528,9 @@ export function AccountsTab({ semesterId, visible, onPendingChange, onChanged }:
                         <div className="mt-0.5 text-xs text-muted-foreground">Still on default password</div>
                       )}
                     </TableCell>
-                    <TableCell className="px-3 py-2 align-middle text-xs text-muted-foreground">{formatWhen(r.requestedAt)}</TableCell>
+                    <TableCell data-label="Requested" className="px-3 py-2 align-middle text-xs text-muted-foreground">{formatWhen(r.requestedAt)}</TableCell>
                     <TableCell className="px-3 py-2 align-middle">
-                      <div className="flex justify-end gap-1.5">
+                      <div className={cn(stackedActions, "max-md:pt-1")}>
                         {r.status === "pending" && (
                           <>
                             <Button type="button" size="sm" disabled={working} onClick={() => setConfirm({ action: "accept", rows: [r] })}>

@@ -92,7 +92,7 @@ function RatingCell({ rating, title, pending, onChange }: RatingCellProps) {
         title={`${title}: ${config.label}`}
         aria-label={`${title}: ${config.label}. Change evaluation`}
         className={cn(
-          "inline-flex h-6 w-full items-center justify-between gap-0.5 rounded-md border px-1.5 text-[10px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "inline-flex h-6 w-full items-center justify-between gap-0.5 rounded-md border px-1.5 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
           config.chipClass,
           pending && "opacity-40",
         )}
@@ -227,7 +227,7 @@ export function WeeklyPanel({
           <span
             key={rating}
             className={cn(
-              "inline-flex h-5 items-center rounded-md border px-1.5 text-[10px] font-medium",
+              "inline-flex h-5 items-center rounded-md border px-1.5 text-[11px] font-medium",
               RATING_CONFIG[rating].chipClass,
             )}
           >
@@ -259,7 +259,7 @@ export function WeeklyPanel({
 
       {error && (
         <Alert variant="destructive" className="mb-3">
-          <AlertDescription className="flex items-center justify-between gap-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {error}
             <Button variant="outline" size="sm" onClick={reload}>
               Retry
@@ -312,7 +312,7 @@ export function WeeklyPanel({
                       className="h-14 whitespace-normal px-1 pb-2 text-center align-bottom"
                       title={formatPeriod(c.dateFrom, c.dateTo)}
                     >
-                      <span className="block text-[10px] font-medium leading-tight">
+                      <span className="block text-[11px] font-medium leading-tight">
                         {formatPeriod(c.dateFrom, c.dateTo)}
                       </span>
                     </TableHead>

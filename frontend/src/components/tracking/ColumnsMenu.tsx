@@ -110,7 +110,7 @@ export function ColumnsMenu({ options, hidden, onToggle, onShowAll, onHideAll }:
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-40 mt-1 w-64 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
+          className="absolute right-0 z-40 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
         >
           <div className="flex items-center justify-between px-2 py-1.5">
             <span className="text-xs font-medium text-muted-foreground">Show columns</span>

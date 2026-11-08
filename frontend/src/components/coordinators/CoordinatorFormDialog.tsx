@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/native-select";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -104,8 +105,8 @@ export function CoordinatorFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <DialogContent size="2xl">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader>
             <DialogTitle>
               {coordinator ? "Edit Coordinator" : "Add Coordinator"}
@@ -117,102 +118,104 @@ export function CoordinatorFormDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="coord-fullname">Full name</Label>
-            <Input
-              id="coord-fullname"
-              maxLength={100}
-              value={fullname}
-              onChange={(e) => setFullname(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="coord-email">Email</Label>
-            <Input
-              id="coord-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
+          <DialogBody className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="coord-employee">Employee number</Label>
+              <Label htmlFor="coord-fullname">Full name</Label>
               <Input
-                id="coord-employee"
-                maxLength={50}
-                value={employeeNumber}
-                onChange={(e) => setEmployeeNumber(e.target.value)}
+                id="coord-fullname"
+                maxLength={100}
+                value={fullname}
+                onChange={(e) => setFullname(e.target.value)}
               />
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="coord-titles">Professional titles</Label>
+              <Label htmlFor="coord-email">Email</Label>
               <Input
-                id="coord-titles"
-                maxLength={255}
-                placeholder="e.g. LPT, MIT"
-                value={titles}
-                onChange={(e) => setTitles(e.target.value)}
+                id="coord-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
-          </div>
 
-          <div className="flex flex-col gap-2 [&>div]:w-full">
-            <Label htmlFor="coord-program">Program</Label>
-            <NativeSelect
-              id="coord-program"
-              className="w-full"
-              value={programId}
-              onChange={(e) => setProgramId(e.target.value)}
-            >
-              <NativeSelectOption value="">Select a program</NativeSelectOption>
-              {programOptions.map((p) => (
-                <NativeSelectOption key={p.id} value={String(p.id)}>
-                  {p.collegeAbbreviation} · {p.abbreviation} — {p.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="coord-employee">Employee number</Label>
+                <Input
+                  id="coord-employee"
+                  maxLength={50}
+                  value={employeeNumber}
+                  onChange={(e) => setEmployeeNumber(e.target.value)}
+                />
+              </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>Coordinator type</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {(["STAFF", "ADMIN"] as CoordinatorType[]).map((value) => (
-                <Button
-                  key={value}
-                  type="button"
-                  variant={type === value ? "default" : "outline"}
-                  onClick={() => setType(value)}
-                >
-                  {value === "ADMIN" ? "Admin" : "Staff"}
-                </Button>
-              ))}
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="coord-titles">Professional titles</Label>
+                <Input
+                  id="coord-titles"
+                  maxLength={255}
+                  placeholder="e.g. LPT, MIT"
+                  value={titles}
+                  onChange={(e) => setTitles(e.target.value)}
+                />
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Admin coordinators can see the Reports and Archives tabs.
-            </p>
-          </div>
 
-          {!coordinator && (
+            <div className="flex flex-col gap-2 [&>div]:w-full">
+              <Label htmlFor="coord-program">Program</Label>
+              <NativeSelect
+                id="coord-program"
+                className="w-full"
+                value={programId}
+                onChange={(e) => setProgramId(e.target.value)}
+              >
+                <NativeSelectOption value="">Select a program</NativeSelectOption>
+                {programOptions.map((p) => (
+                  <NativeSelectOption key={p.id} value={String(p.id)}>
+                    {p.collegeAbbreviation} · {p.abbreviation} — {p.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
+
             <div className="flex flex-col gap-2">
-              <Label htmlFor="coord-password">Initial password</Label>
-              <Input
-                id="coord-password"
-                type="password"
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <Label>Coordinator type</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {(["STAFF", "ADMIN"] as CoordinatorType[]).map((value) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    variant={type === value ? "default" : "outline"}
+                    onClick={() => setType(value)}
+                  >
+                    {value === "ADMIN" ? "Admin" : "Staff"}
+                  </Button>
+                ))}
+              </div>
               <p className="text-xs text-muted-foreground">
-                At least 8 characters.
+                Admin coordinators can see the Reports and Archives tabs.
               </p>
             </div>
-          )}
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+            {!coordinator && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="coord-password">Initial password</Label>
+                <Input
+                  id="coord-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  At least 8 characters.
+                </p>
+              </div>
+            )}
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </DialogBody>
 
           <DialogFooter>
             <Button

@@ -221,7 +221,7 @@ function HowItWorks() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="rounded-full p-0.5 text-muted-foreground pointer-coarse:p-2.5 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="How progress is computed"
       >
         <CircleAlert className="h-5 w-5" />
@@ -280,10 +280,10 @@ export default function StudentProgress() {
   return (
     <DashboardLayout>
       <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold tracking-tight">Progress</h1>
+        <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Progress</h1>
         <HowItWorks />
       </div>
-      <p className="mb-6 mt-1 text-sm text-muted-foreground">
+      <p className="mb-5 mt-1 text-sm text-muted-foreground sm:mb-6">
         Track your requirements, DTR and weekly reports.
       </p>
       {error && <p className="mb-3 text-sm text-destructive">{error}</p>}

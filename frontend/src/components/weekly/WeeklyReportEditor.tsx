@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, CloudOff, Download, Eraser, Eye, FilePenLine, Loader2, Plus, Printer, Trash2 } from "lucide-react";
 import api from "@/lib/api";
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
+import { PaperPreview } from "@/components/paper/PaperPreview";
 import { collegeLogoSrc } from "@/components/colleges/CollegeLogo";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
@@ -89,39 +90,6 @@ const STATUS_TEXT: Record<Status, string> = {
   offline: "Offline: saved on this device, will sync when you're back online",
   error: "Saved on this device. Couldn't reach the server, will retry",
 };
-
-/** Kunwari ay papel: kumikipot ang laki para magkasya sa screen, may hangganan at anino ang bawat pahina */
-function PaperPreview({ children }: { children: ReactNode }) {
-  const outer = useRef<HTMLDivElement>(null);
-  const inner = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const [height, setHeight] = useState<number | undefined>(undefined);
-
-  useEffect(() => {
-    const measure = () => {
-      if (!outer.current || !inner.current) return;
-      const s = Math.min(1, (outer.current.clientWidth - 24) / 816);
-      const next = s > 0 ? s : 1;
-      setScale(next);
-      setHeight(inner.current.offsetHeight * next);
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    if (outer.current) ro.observe(outer.current);
-    if (inner.current) ro.observe(inner.current);
-    return () => ro.disconnect();
-  }, []);
-
-  return (
-    <div ref={outer} className="overflow-hidden rounded-lg bg-zinc-200 p-3 dark:bg-zinc-800">
-      <div style={{ height }}>
-        <div ref={inner} style={{ width: 816, transform: `scale(${scale})`, transformOrigin: "top left" }}>
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ReadOnly({ label, value }: { label: string; value: string }) {
   return (
@@ -471,7 +439,7 @@ function WeeklyReportEditorBody({ refId, onClose }: { refId: string; onClose: ()
       </p>
 
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-h-[92vh] gap-3 overflow-y-auto sm:max-w-4xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] max-w-[calc(100%-1rem)] gap-3 p-3 sm:max-h-[92dvh] sm:max-w-4xl sm:p-4">
           <DialogHeader>
             <DialogTitle>Weekly report preview</DialogTitle>
             <DialogDescription>
@@ -503,7 +471,7 @@ function WeeklyReportEditorBody({ refId, onClose }: { refId: string; onClose: ()
                 id="wk-rowsPerPage"
                 value={content.rowsPerPage ?? 0}
                 onChange={(e) => setRowsPerPage(Number(e.target.value))}
-                className="mt-1 block h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-72"
+                className="mt-1 block h-9 w-full rounded-md border bg-background px-3 text-base outline-none pointer-coarse:h-11 md:text-sm focus-visible:ring-2 focus-visible:ring-ring sm:w-72"
               >
                 <option value={0}>All days on one page (default)</option>
                 {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (

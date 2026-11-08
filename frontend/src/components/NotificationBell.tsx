@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardPlus,
   Inbox,
+  LockOpen,
   MessageSquare,
 } from "lucide-react";
 import api from "@/lib/api";
@@ -23,6 +24,7 @@ function iconFor(type: string) {
   if (t === "assigned") return { Icon: ClipboardPlus, cls: "bg-primary/10 text-primary" };
   if (t === "checked") return { Icon: CheckCircle2, cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" };
   if (t === "invalid") return { Icon: AlertCircle, cls: "bg-red-500/10 text-red-600 dark:text-red-400" };
+  if (t.startsWith("evaluation_open")) return { Icon: LockOpen, cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" };
   if (t.startsWith("comment")) return { Icon: MessageSquare, cls: "bg-violet-500/10 text-violet-600 dark:text-violet-400" };
   if (t.includes("company")) return { Icon: Building2, cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" };
   return { Icon: Bell, cls: "bg-muted text-muted-foreground" };
@@ -121,7 +123,7 @@ export function NotificationBell() {
         aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
         aria-haspopup="true"
         aria-expanded={open}
-        className="relative inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground outline-none transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="relative inline-flex h-9 w-9 shrink-0 pointer-coarse:h-11 pointer-coarse:w-11 items-center justify-center rounded-full text-muted-foreground outline-none transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Bell className="h-5 w-5" />
         {unread > 0 && (
@@ -143,14 +145,14 @@ export function NotificationBell() {
               <button
                 type="button"
                 onClick={() => void markRead()}
-                className="text-xs font-medium text-primary hover:underline"
+                className="-my-1 rounded px-1 py-1 text-xs font-medium text-primary hover:underline pointer-coarse:py-2.5"
               >
                 Mark all as read
               </button>
             )}
           </div>
 
-          <div className="max-h-[70vh] overflow-y-auto">
+          <div className="max-h-[min(70vh,calc(100dvh-9rem))] overflow-y-auto overscroll-contain">
             {data === null && !failed && (
               <p className="px-4 py-8 text-center text-sm text-muted-foreground">Loading…</p>
             )}
@@ -185,7 +187,7 @@ export function NotificationBell() {
                           {n.message && (
                             <span className="mt-0.5 line-clamp-2 block whitespace-pre-wrap text-xs text-muted-foreground">{n.message}</span>
                           )}
-                          <span className="mt-1 block text-[11px] text-muted-foreground">{timeAgo(n.createdAt)}</span>
+                          <span className="mt-1 block text-xs text-muted-foreground">{timeAgo(n.createdAt)}</span>
                         </span>
                         {n.unread && <span aria-label="Unread" className="mt-2 h-2 w-2 shrink-0 rounded-full bg-primary" />}
                       </button>
@@ -198,7 +200,7 @@ export function NotificationBell() {
 
           {role === "STUDENT" && (
             <div className="border-t px-4 py-2 text-center">
-              <Link to="/student/notifications" onClick={close} className="text-xs font-medium text-primary hover:underline">
+              <Link to="/student/notifications" onClick={close} className="inline-block py-1 text-sm font-medium text-primary hover:underline pointer-coarse:py-2">
                 View all
               </Link>
             </div>

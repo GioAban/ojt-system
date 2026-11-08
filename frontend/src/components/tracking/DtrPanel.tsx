@@ -518,7 +518,7 @@ export function DtrPanel({
           <span
             key={status}
             className={cn(
-              "inline-flex h-5 items-center rounded-md border px-1.5 text-[10px] font-medium",
+              "inline-flex h-5 items-center rounded-md border px-1.5 text-[11px] font-medium",
               STATUS_CONFIG[status].chipClass,
             )}
           >
@@ -551,7 +551,7 @@ export function DtrPanel({
 
       {error && (
         <Alert variant="destructive" className="mb-3">
-          <AlertDescription className="flex items-center justify-between gap-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {error}
             <Button variant="outline" size="sm" onClick={reload}>
               Retry
@@ -769,7 +769,7 @@ export function DtrPanel({
                         </span>
                         {excess > 0 && (
                           <span
-                            className="mt-0.5 block text-[10px] font-medium leading-none text-amber-600 dark:text-amber-400"
+                            className="mt-0.5 block text-[11px] font-medium leading-none text-amber-600 dark:text-amber-400"
                             title={`Rendered hours exceed the required ${formatHours(required ?? 0)} hours`}
                           >
                             Exceeded +{formatHours(excess)}
@@ -787,11 +787,11 @@ export function DtrPanel({
                         {percent === null ? (
                           <span className="text-muted-foreground/60">—</span>
                         ) : excess > 0 ? (
-                          <span className="inline-flex h-5 items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                          <span className="inline-flex h-5 items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
                             Exceeded
                           </span>
                         ) : complete ? (
-                          <span className="inline-flex h-5 items-center rounded-md border border-emerald-600/30 bg-emerald-600/10 px-1.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+                          <span className="inline-flex h-5 items-center rounded-md border border-emerald-600/30 bg-emerald-600/10 px-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                             Completed
                           </span>
                         ) : (

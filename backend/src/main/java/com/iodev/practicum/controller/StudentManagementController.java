@@ -1,5 +1,6 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.SupervisorResolver;
 import com.iodev.practicum.dto.StudentManagementDtos.*;
 import com.iodev.practicum.model.Company;
 import com.iodev.practicum.model.Coordinator;
@@ -310,8 +311,8 @@ public class StudentManagementController {
                 s.getDeployedDate(), s.getStartTrainingDate(), s.getCompletedDate(),
                 s.getRenderedHours(), s.getTrainingDuration(),
                 c == null ? null : c.getAddress(),
-                d == null ? null : d.getSupervisorFullname(),
-                d == null ? null : d.getSupervisorPosition(),
+                SupervisorResolver.forDepartment(d).nameOrNull(),
+                SupervisorResolver.forDepartment(d).positionOrNull(),
                 s.getEmployabilityLevel(),
                 new LinkedHashMap<>()));
     }

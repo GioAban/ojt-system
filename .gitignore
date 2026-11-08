@@ -7,6 +7,8 @@ deploy/backups/
 .vscode/
 .idea/
 
+.claude/
+CLAUDE.md
 # build outputs
 backend/target/
 frontend/node_modules/

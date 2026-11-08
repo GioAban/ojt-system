@@ -5,7 +5,9 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 
 @Entity
-@Table(name = "signed_evaluations")
+@Table(name = "signed_evaluations", uniqueConstraints = @UniqueConstraint(
+        name = "uk_signed_evaluations_student",
+        columnNames = {"evaluation_id", "student_id"}))
 public class SignedEvaluation {
 
     @Id
@@ -46,6 +48,28 @@ public class SignedEvaluation {
 
     @Column(name = "signed_date")
     private Timestamp signedDate;
+
+    @Column(name = "supervisor_name")
+    private String supervisorName;
+
+    @Column(name = "supervisor_position")
+    private String supervisorPosition;
+
+    @Column(name = "period_from")
+    private java.time.LocalDate periodFrom;
+
+    @Column(name = "period_to")
+    private java.time.LocalDate periodTo;
+
+    @Column(name = "contact_no")
+    private String contactNo;
+
+    /** Huling coordinator na nagwasto ng laman, at kailan */
+    @Column(name = "edited_by_name")
+    private String editedByName;
+
+    @Column(name = "edited_at")
+    private Timestamp editedAt;
 
     @org.hibernate.annotations.CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -93,6 +117,27 @@ public class SignedEvaluation {
 
     public Timestamp getSignedDate() { return signedDate; }
     public void setSignedDate(Timestamp signedDate) { this.signedDate = signedDate; }
+
+    public String getSupervisorName() { return supervisorName; }
+    public void setSupervisorName(String supervisorName) { this.supervisorName = supervisorName; }
+
+    public String getSupervisorPosition() { return supervisorPosition; }
+    public void setSupervisorPosition(String supervisorPosition) { this.supervisorPosition = supervisorPosition; }
+
+    public java.time.LocalDate getPeriodFrom() { return periodFrom; }
+    public void setPeriodFrom(java.time.LocalDate periodFrom) { this.periodFrom = periodFrom; }
+
+    public java.time.LocalDate getPeriodTo() { return periodTo; }
+    public void setPeriodTo(java.time.LocalDate periodTo) { this.periodTo = periodTo; }
+
+    public String getContactNo() { return contactNo; }
+    public void setContactNo(String contactNo) { this.contactNo = contactNo; }
+
+    public String getEditedByName() { return editedByName; }
+    public void setEditedByName(String editedByName) { this.editedByName = editedByName; }
+
+    public Timestamp getEditedAt() { return editedAt; }
+    public void setEditedAt(Timestamp editedAt) { this.editedAt = editedAt; }
 
     public Timestamp getCreatedAt() { return createdAt; }
     public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }

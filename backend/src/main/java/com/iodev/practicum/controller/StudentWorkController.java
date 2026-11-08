@@ -6,6 +6,8 @@ import com.iodev.practicum.dto.StudentProfileDtos.LinkRequest;
 import com.iodev.practicum.dto.StudentProfileDtos.SubmissionItem;
 import com.iodev.practicum.dto.StudentProfileDtos.TurnInRequest;
 import com.iodev.practicum.dto.StudentProfileDtos.WorkDetail;
+import com.iodev.practicum.dto.SubmissionDtos.MaterialDto;
+import com.iodev.practicum.model.RequirementMaterial;
 import com.iodev.practicum.model.Student;
 import com.iodev.practicum.model.Coordinator;
 import com.iodev.practicum.model.DocumentRequirementAttachment;
@@ -18,17 +20,25 @@ import com.iodev.practicum.model.SubmissionFile;
 import com.iodev.practicum.repository.CoordinatorRepository;
 import com.iodev.practicum.repository.DocumentRequirementAttachmentRepository;
 import com.iodev.practicum.repository.PrivateDocumentMessageRepository;
+import com.iodev.practicum.repository.RequirementMaterialRepository;
 import com.iodev.practicum.repository.SignedDtrRepository;
 import com.iodev.practicum.repository.SignedWeeklyReportRepository;
 import com.iodev.practicum.repository.StudentManagementRepository;
 import com.iodev.practicum.repository.SubmissionFileRepository;
+import com.iodev.practicum.service.EvaluationFormService;
 import com.iodev.practicum.service.RequirementStorage;
 import com.iodev.practicum.service.CoordinatorNotifier;
 import com.iodev.practicum.service.StudentWorkService;
 import com.iodev.practicum.service.StudentWorkService.Row;
 import com.iodev.practicum.service.StudentWorkService.Slot;
+import com.iodev.practicum.storage.FileStorageService;
+import com.iodev.practicum.util.EvaluationAccess;
 import com.iodev.practicum.util.SubmissionStatus;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +55,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -78,6 +91,9 @@ public class StudentWorkController {
     @Autowired private SignedDtrRepository signedDtrRepository;
     @Autowired private RequirementStorage storage;
     @Autowired private CoordinatorNotifier coordinatorNotifier;
+    @Autowired private RequirementMaterialRepository materialRepository;
+    @Autowired private FileStorageService fileStorage;
+    @Autowired private EvaluationFormService evaluationForms;
 
     @GetMapping
     @Transactional
@@ -107,12 +123,16 @@ public class StudentWorkController {
         if (count(s, scope, refId) >= MAX_ITEMS) {
             return ResponseEntity.badRequest().body("You can add up to " + MAX_ITEMS + " items.");
         }
+        if (row.systemKey() != null && !EvaluationFormService.isSignedCopyName(file.getOriginalFilename())) {
+            return ResponseEntity.badRequest().body("Upload the signed copy as an image or PDF.");
+        }
 
         String original = cleanName(file.getOriginalFilename());
         String key = "submissions/" + s.getId() + "/" + scope + "-" + refId + "/" + UUID.randomUUID() + "-" + original;
         try {
             storage.put(key, file.getInputStream(), file.getSize(), file.getContentType());
         } catch (IOException | RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(getClass()).error("Upload failed", e);
             return ResponseEntity.status(502).body("The upload failed. Please try again.");
         }
 
@@ -150,6 +170,9 @@ public class StudentWorkController {
         Slot slot = work.slot(s, row, false);
         ResponseEntity<?> blocked = editBlock(slot);
         if (blocked != null) return blocked;
+        if (row.systemKey() != null) {
+            return ResponseEntity.badRequest().body("Upload the signed copy as an image or PDF instead of a link.");
+        }
         if (count(s, scope, refId) >= MAX_ITEMS) {
             return ResponseEntity.badRequest().body("You can add up to " + MAX_ITEMS + " items.");
         }
@@ -206,7 +229,10 @@ public class StudentWorkController {
         Slot slot = work.slot(s, row, false);
         ResponseEntity<?> blocked = editBlock(slot);
         if (blocked != null) return blocked;
-        if (count(s, scope, refId) == 0) {
+        if (row.systemKey() != null) {
+            String problem = evaluationForms.turnInProblem(evaluationForms.evaluationFor(refId), s, refId);
+            if (problem != null) return ResponseEntity.badRequest().body(problem);
+        } else if (count(s, scope, refId) == 0) {
             return ResponseEntity.badRequest().body("Add a file or a link before turning in.");
         }
 
@@ -224,7 +250,7 @@ public class StudentWorkController {
                 ? slot.hours().stripTrailingZeros().toPlainString() + " hours reported"
                 : count(s, scope, refId) + (count(s, scope, refId) == 1 ? " attachment" : " attachments");
         coordinatorNotifier.fromStudent(s, "turned_in",
-                fullName(s) + " turned in " + row.title(), detail,
+                fullName(s) + " turned in " + (row.systemKey() != null ? "the " : "") + row.title(), detail,
                 CoordinatorNotifier.workLink(scope, refId, s.getId()));
         return ResponseEntity.ok(build(s, slot));
     }
@@ -237,6 +263,8 @@ public class StudentWorkController {
         Row row = work.find(s, scope, refId);
         if (row == null) return ResponseEntity.status(404).body("Not found.");
 
+        if (row.closed()) return ResponseEntity.status(409).body(EvaluationAccess.CLOSED_MESSAGE);
+
         Slot slot = work.slot(s, row, false);
         if ("CHECKED".equals(slot.statusKey())) {
             return ResponseEntity.status(409).body("This was already checked by your coordinator, so it can't be changed.");
@@ -247,6 +275,42 @@ public class StudentWorkController {
         slot.setStatus(SubmissionStatus.ASSIGNED);
         slot.save();
         return ResponseEntity.ok(build(s, slot));
+    }
+
+    // ---- attachments ng coordinator ----
+
+    @GetMapping("/materials/{materialId}/file")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> materialFile(@PathVariable String scope, @PathVariable Long refId,
+                                          @PathVariable Long materialId, Authentication auth) {
+        Student s = current(auth);
+        if (s == null) return ResponseEntity.status(403).body("Student account not found.");
+        Row row = work.find(s, scope, refId);
+        if (row == null || !StudentWorkService.REQUIREMENT.equals(scope)) {
+            return ResponseEntity.status(404).body("Not found.");
+        }
+        if (row.locked()) return ResponseEntity.status(409).body(EvaluationAccess.CLOSED_MESSAGE);
+
+        RequirementMaterial material = materialRepository.findByIdAndRequirementId(materialId, refId).orElse(null);
+        if (material == null) return ResponseEntity.status(404).body("Attachment not found.");
+        if (!"FILE".equals(material.getKind())) return ResponseEntity.badRequest().body("This attachment is a link.");
+
+        Path path = fileStorage.resolve(material.getStoredName());
+        if (path == null || !Files.isRegularFile(path)) {
+            return ResponseEntity.status(404).body("File not found on the server.");
+        }
+        MediaType type;
+        try {
+            type = MediaType.parseMediaType(material.getContentType() == null
+                    ? fileStorage.contentTypeFor(material.getName()) : material.getContentType());
+        } catch (RuntimeException e) {
+            type = MediaType.APPLICATION_OCTET_STREAM;
+        }
+        return ResponseEntity.ok()
+                .contentType(type)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.inline().filename(material.getName(), StandardCharsets.UTF_8).build().toString())
+                .body(new FileSystemResource(path));
     }
 
     // ---- private comments ----
@@ -270,6 +334,7 @@ public class StudentWorkController {
         if (s == null) return ResponseEntity.status(403).body("Student account not found.");
         Row row = work.find(s, scope, refId);
         if (row == null) return ResponseEntity.status(404).body("Not found.");
+        if (row.closed()) return ResponseEntity.status(409).body(EvaluationAccess.CLOSED_MESSAGE);
 
         String text = body == null || body.body() == null ? "" : body.body().trim();
         if (text.isEmpty()) return ResponseEntity.badRequest().body("Write your comment first.");
@@ -353,6 +418,7 @@ public class StudentWorkController {
     // ---- helpers ----
 
     private static ResponseEntity<?> editBlock(Slot slot) {
+        if (slot.row().closed()) return ResponseEntity.status(409).body(EvaluationAccess.CLOSED_MESSAGE);
         String key = slot.statusKey();
         if ("CHECKED".equals(key)) {
             return ResponseEntity.status(409).body("This was already checked by your coordinator, so it can't be changed.");
@@ -403,14 +469,27 @@ public class StudentWorkController {
             catch (RuntimeException e) { templateUrl = null; }
         }
 
-        boolean editable = "ASSIGNED".equals(statusKey) || "INVALID".equals(statusKey);
+        // Mga attachment ng coordinator (requirement lang); hindi ipinapakita kung naka-lock pa
+        List<MaterialDto> materials = !StudentWorkService.REQUIREMENT.equals(row.scope()) || row.locked()
+                ? List.of()
+                : materialRepository.findByRequirementIdOrderByIdAsc(row.id()).stream()
+                        .map(m -> new MaterialDto(m.getId(), m.getKind(), m.getName(), m.getUrl(),
+                                m.getSizeBytes(), m.getContentType()))
+                        .toList();
+
+        boolean closed = row.closed();
+        boolean editable = !closed && ("ASSIGNED".equals(statusKey) || "INVALID".equals(statusKey));
+        // Ang evaluation ay kailangan ng signed copy; ang mga score ay sinusuri sa form at sa turn in
+        boolean hasRequiredWork = row.systemKey() == null ? !items.isEmpty()
+                : items.stream().anyMatch(i -> "FILE".equals(i.kind()) && EvaluationFormService.isSignedCopyName(i.name()));
         BigDecimal hours = slot.hours() != null ? slot.hours() : row.hours();
         return new WorkDetail(
                 row.scope(), row.id(), row.title(), row.subtitle(), row.type(), row.instructions(),
                 row.dueDate() == null ? null : row.dueDate().toInstant().toString(),
                 StudentWorkService.statusLabel(statusKey), templateName, templateUrl,
-                editable, editable && !items.isEmpty(), "FOR_CHECKING".equals(statusKey),
-                StudentWorkService.DTR.equals(row.scope()), hours, items);
+                editable, editable && hasRequiredWork, !closed && "FOR_CHECKING".equals(statusKey),
+                StudentWorkService.DTR.equals(row.scope()), hours, items,
+                closed, row.locked(), !closed, materials, row.systemKey());
     }
 
     private Student current(Authentication authentication) {

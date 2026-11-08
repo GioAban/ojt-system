@@ -13,6 +13,8 @@ import com.iodev.practicum.repository.StudentSignedDtrQueries;
 import com.iodev.practicum.repository.StudentSignedWeeklyQueries;
 import com.iodev.practicum.repository.StudentWeeklyQueries;
 import com.iodev.practicum.repository.StudentWorkQueries;
+import com.iodev.practicum.repository.SubmissionFileRepository;
+import com.iodev.practicum.util.EvaluationAccess;
 import com.iodev.practicum.util.SubmissionStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -21,10 +23,13 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Pinagsasama ang requirements, weekly reports at DTR ng isang student bilang isang uri ng "gawain",
@@ -45,11 +50,22 @@ public class StudentWorkService {
     @Autowired private StudentWeeklyQueries weeklyQueries;
     @Autowired private StudentSignedDtrQueries signedDtrQueries;
     @Autowired private StudentSignedWeeklyQueries signedWeeklyQueries;
+    @Autowired private SubmissionFileRepository submissionFiles;
 
     /** Isang gawain na nakikita ng student, kasama ang kasalukuyang status niya */
     public record Row(String scope, Long id, String title, String subtitle, String type,
                       String instructions, Timestamp dueDate, String template, Timestamp createdAt,
-                      String statusKey, Timestamp updatedAt, BigDecimal hours, boolean hasRecord) {}
+                      String statusKey, Timestamp updatedAt, BigDecimal hours, boolean hasRecord,
+                      String systemKey, boolean closed, boolean locked) {
+
+        /** Karaniwang gawain: hindi built-in, kaya hindi kailanman sarado */
+        public Row(String scope, Long id, String title, String subtitle, String type,
+                   String instructions, Timestamp dueDate, String template, Timestamp createdAt,
+                   String statusKey, Timestamp updatedAt, BigDecimal hours, boolean hasRecord) {
+            this(scope, id, title, subtitle, type, instructions, dueDate, template, createdAt,
+                    statusKey, updatedAt, hours, hasRecord, null, false, false);
+        }
+    }
 
     public static boolean isInitialOnly(Student s) {
         String status = s.getStatus() == null ? "" : s.getStatus().trim();
@@ -87,15 +103,31 @@ public class StudentWorkService {
         for (DocumentRequirementAttachment a : attachmentQueries.findByStudent(s.getId())) {
             att.put(a.getDocumentRequirement().getId(), a);
         }
-        for (DocumentRequirement r : requirementQueries.findForStudent(coordinatorId, semesterId)) {
+        Set<Long> worked = new HashSet<>();
+        for (Object[] w : submissionFiles.workedOn(s.getId())) {
+            if (REQUIREMENT.equals(w[0])) worked.add(((Number) w[1]).longValue());
+        }
+
+        // Nasa dulo ng listahan ang mga built-in: Midterm, tapos Final
+        List<DocumentRequirement> requirements = new ArrayList<>(requirementQueries.findForStudent(coordinatorId, semesterId));
+        requirements.sort(Comparator.comparingInt(
+                r -> r.getSystemKey() == null ? -1 : EvaluationAccess.KEYS.indexOf(r.getSystemKey())));
+
+        for (DocumentRequirement r : requirements) {
             String type = r.getType() == null ? "" : r.getType().trim().toLowerCase();
-            if (initialOnly && !type.equals("initial")) continue;
+            // Ang mga built-in ay nakikita ng lahat ng student: ang open/closed ang nagpapasya, hindi ang status
+            if (initialOnly && !type.equals("initial") && !EvaluationAccess.isBuiltIn(r)) continue;
             if (!deployed && type.startsWith("post")) continue;
             DocumentRequirementAttachment a = att.get(r.getId());
-            out.add(new Row(REQUIREMENT, r.getId(), r.getTitle(), null, type, r.getInstructions(),
-                    r.getDueDate(), r.getTemplate(), r.getCreatedAt(),
-                    a == null ? "ASSIGNED" : SubmissionStatus.key(a.getStatus()),
-                    a == null ? null : a.getUpdatedAt(), null, a != null));
+            String statusKey = a == null ? "ASSIGNED" : SubmissionStatus.key(a.getStatus());
+            boolean closed = EvaluationAccess.isClosed(s, r);
+            // Sarado at walang ginawa: walang ipapakita sa student maliban sa "Not open yet"
+            boolean locked = closed && "ASSIGNED".equals(statusKey) && !worked.contains(r.getId());
+            out.add(new Row(REQUIREMENT, r.getId(), r.getTitle(), null, type,
+                    locked ? null : r.getInstructions(),
+                    r.getDueDate(), locked ? null : r.getTemplate(), r.getCreatedAt(),
+                    statusKey, a == null ? null : a.getUpdatedAt(), null, a != null,
+                    r.getSystemKey(), closed, locked));
         }
         if (initialOnly || !deployed) return out;
 

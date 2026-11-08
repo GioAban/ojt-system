@@ -26,11 +26,11 @@ const PROGRAMS = [
 /** Minimalist na login page: logo, features, login card, CITE info, coordinators at footer */
 export function LoginLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-dvh overflow-x-clip bg-background text-foreground">
       <header className="border-b">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-          <img src="/logos/ucu-logo.png" alt="Urdaneta City University" className="h-10 w-10 object-contain" />
-          <div className="leading-tight">
+          <img src="/logos/ucu-logo.png" alt="Urdaneta City University" className="h-10 w-10 shrink-0 object-contain" />
+          <div className="min-w-0 leading-tight">
             <p className="text-sm font-semibold">Urdaneta City University</p>
             <p className="text-xs text-muted-foreground">College of Information and Technology Education</p>
           </div>
@@ -38,10 +38,10 @@ export function LoginLayout({ children }: { children: ReactNode }) {
       </header>
 
       <main>
-        <section className="mx-auto grid max-w-6xl gap-12 px-4 py-12 lg:grid-cols-[1.2fr_1fr] lg:items-center lg:py-20">
-          <div>
+        <section className="mx-auto grid max-w-6xl gap-10 px-4 py-8 sm:py-12 lg:grid-cols-[1.2fr_1fr] lg:items-center lg:gap-12 lg:py-20">
+          <div className="order-2 lg:order-none">
             <p className="text-sm font-medium text-primary">OJT / Practicum System</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-4xl">
               Your on-the-job training, organized in one place.
             </h1>
             <p className="mt-3 max-w-xl text-muted-foreground">
@@ -60,8 +60,8 @@ export function LoginLayout({ children }: { children: ReactNode }) {
             </ul>
           </div>
 
-          <div className="w-full max-w-md justify-self-center rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
-            <div className="mb-6 flex flex-col items-center text-center">
+          <div className="order-1 w-full max-w-md justify-self-center sm:rounded-2xl sm:border sm:bg-card sm:p-8 sm:shadow-sm lg:order-none">
+            <div className="mb-5 flex flex-col items-center text-center sm:mb-6">
               <img src="/logos/cite-seal.png" alt="CITE seal" className="h-16 w-16 object-contain" />
               <h2 className="mt-3 text-xl font-semibold">Sign in</h2>
               <p className="text-sm text-muted-foreground">Use your Gmail or Student ID.</p>
@@ -71,7 +71,7 @@ export function LoginLayout({ children }: { children: ReactNode }) {
         </section>
 
         <section className="border-t bg-muted/30">
-          <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 lg:grid-cols-2">
+          <div className="mx-auto grid max-w-6xl gap-10 px-4 py-10 sm:py-14 lg:grid-cols-2">
             <div>
               <div className="flex items-center gap-3">
                 <img src="/logos/cite-seal.png" alt="" className="h-12 w-12 object-contain" />
@@ -100,7 +100,7 @@ export function LoginLayout({ children }: { children: ReactNode }) {
               </p>
             </div>
 
-            <div className="flex flex-col gap-4 rounded-2xl border bg-card p-6">
+            <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 sm:p-6">
               <img src="/logos/ucu-60-years.png" alt="UCU 60 years" className="h-24 w-auto self-start object-contain" />
               <h2 className="text-xl font-semibold tracking-tight">Urdaneta City University</h2>
               <p className="text-sm text-muted-foreground">
@@ -122,7 +122,12 @@ export function LoginLayout({ children }: { children: ReactNode }) {
             <img src="/logos/cite-seal.png" alt="" className="h-8 w-8 object-contain" />
             <img src="/logos/ucu-60-years.png" alt="" className="h-8 w-auto object-contain" />
           </div>
-          <p>© {new Date().getFullYear()} Urdaneta City University · CITE OJT System</p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <a href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+              Privacy Notice
+            </a>
+            <p>© {new Date().getFullYear()} Urdaneta City University · CITE OJT System</p>
+          </div>
         </div>
       </footer>
     </div>

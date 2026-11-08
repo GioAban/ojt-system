@@ -36,6 +36,13 @@ public class Company {
     @Column(name = "imsup_position", nullable = false)
     private String imsupPosition;
 
+    /** Contact ng immediate supervisor; ginagamit kapag walang supervisor ang department ng student */
+    @Column(name = "imsup_contact_number")
+    private String imsupContactNumber;
+
+    @Column(name = "imsup_email")
+    private String imsupEmail;
+
     @Column(name = "imsup_comp_evid_identity")
     private String imsupCompEvidIdentity;
 
@@ -91,6 +98,12 @@ public class Company {
 
     public String getImsupPosition() { return imsupPosition; }
     public void setImsupPosition(String imsupPosition) { this.imsupPosition = imsupPosition; }
+
+    public String getImsupContactNumber() { return imsupContactNumber; }
+    public void setImsupContactNumber(String imsupContactNumber) { this.imsupContactNumber = imsupContactNumber; }
+
+    public String getImsupEmail() { return imsupEmail; }
+    public void setImsupEmail(String imsupEmail) { this.imsupEmail = imsupEmail; }
 
     public String getImsupCompEvidIdentity() { return imsupCompEvidIdentity; }
     public void setImsupCompEvidIdentity(String imsupCompEvidIdentity) { this.imsupCompEvidIdentity = imsupCompEvidIdentity; }
