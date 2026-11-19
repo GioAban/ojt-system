@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Copy, Download, Link2 } from "lucide-react";
+import { Copy, Download, Link2, Share2 } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { notify } from "@/lib/notify";
@@ -95,6 +95,22 @@ export function CompanyRequestLinkCard({
     }
   }
 
+  // Sa phone: share sheet (Messenger, email...). Kung wala, kopyahin na lang.
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  async function share() {
+    try {
+      await navigator.share({
+        title: "Host Training Establishment request",
+        text: "Please fill in your company's details here:",
+        url,
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      void copy();
+    }
+  }
+
   function downloadQr() {
     const svg = qrBox.current?.querySelector("svg");
     if (!svg) return;
@@ -132,7 +148,7 @@ export function CompanyRequestLinkCard({
               Create a link and QR code you can share by email, Facebook or
               print. The company fills in its details and agrees to the Data
               Privacy Notice. No account is needed. The request appears below
-              for you to approve or decline.
+              for you to review, then approve, merge or reject.
             </p>
             <div className="mt-4 flex flex-wrap items-end gap-3">
               <label className="flex flex-col gap-1 text-sm">
@@ -219,16 +235,23 @@ export function CompanyRequestLinkCard({
             </Button>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               readOnly
               value={url}
               aria-label="Company request link"
               onFocus={(e) => e.currentTarget.select()}
             />
-            <Button type="button" variant="outline" onClick={() => void copy()}>
-              <Copy className="h-4 w-4" /> Copy link
-            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="flex-1 sm:flex-none" onClick={() => void copy()}>
+                <Copy className="h-4 w-4" /> Copy
+              </Button>
+              {canShare && (
+                <Button type="button" variant="outline" className="flex-1 sm:flex-none" onClick={() => void share()}>
+                  <Share2 className="h-4 w-4" /> Share
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-end gap-2">

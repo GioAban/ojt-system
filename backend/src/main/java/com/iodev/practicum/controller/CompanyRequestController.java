@@ -1,6 +1,11 @@
 package com.iodev.practicum.controller;
 
 import com.iodev.practicum.service.SupervisorResolver;
+import com.iodev.practicum.service.ActionException;
+import com.iodev.practicum.service.CompanyLinkRequestService;
+import com.iodev.practicum.service.FieldErrors;
+import com.iodev.practicum.repository.CompanyNatureRepository;
+import org.springframework.data.domain.Sort;
 import com.iodev.practicum.dto.CompanyRequestDtos.*;
 import com.iodev.practicum.model.Company;
 import com.iodev.practicum.model.Coordinator;
@@ -28,7 +33,7 @@ import java.util.Map;
 /**
  * Mga company/department na ininput ng students. Ang idinagdag ng coordinator ay agad na
  * "approved". Ang hiling ng student ay "pending" hanggang i-approve o i-decline (may dahilan)
- * ng coordinator.
+ * ng coordinator. Ang hiling mula sa company link ay buong company na sinusuri sa /link-requests.
  */
 @RestController
 @RequestMapping("/api/coordinator/company-requests")
@@ -39,6 +44,8 @@ public class CompanyRequestController {
     @Autowired private DepartmentRepository departmentRepository;
     @Autowired private StudentRepository studentRepository;
     @Autowired private StudentNotificationRepository notificationRepository;
+    @Autowired private CompanyLinkRequestService linkService;
+    @Autowired private CompanyNatureRepository natureRepository;
 
     @GetMapping
     @Transactional(readOnly = true)
@@ -96,8 +103,14 @@ public class CompanyRequestController {
                     d.getPrivacyConsentAt() == null ? null : d.getPrivacyConsentAt().toString()));
         }
 
+        // Bagong hiling mula sa company link: isa bawat company, nakatago sa lahat ng listahan hanggang ma-approve
+        List<LinkRequestView> linkRequests = linkService.views(coordinator, semesterId);
+        pending += linkRequests.stream().filter(r -> CompanyLinkRequestService.PENDING.equals(r.status())).count();
+        List<NatureOption> natures = natureRepository.findAll(Sort.by("name")).stream()
+                .map(n -> new NatureOption(n.getId(), n.getName())).toList();
+
         return ResponseEntity.ok(new RequestsResponse(
-                semesterId, coordinator.getAcceptingCompanyRequests(), pending, rows));
+                semesterId, coordinator.getAcceptingCompanyRequests(), pending, rows, linkRequests, natures));
     }
 
     /** Para sa badge ng sidebar */
@@ -110,7 +123,8 @@ public class CompanyRequestController {
         List<Company> companies = companyRepository.findAllForManagement(coordinator.getId(), semesterId)
                 .stream().filter(c -> !Boolean.TRUE.equals(c.getIsArchived())).toList();
         long count = requestedDepartments(companies).stream()
-                .filter(d -> "pending".equalsIgnoreCase(d.getStatus())).count();
+                .filter(d -> "pending".equalsIgnoreCase(d.getStatus())).count()
+                + companyRepository.countPendingLinkRequests(coordinator.getId(), semesterId);
         return ResponseEntity.ok(new PendingCount(count));
     }
 
@@ -189,6 +203,78 @@ public class CompanyRequestController {
     }
 
     // ---------------------------------------------------------------------
+    // Hiling mula sa company link (buong company): edit, approve, merge, reject
+    // ---------------------------------------------------------------------
+
+    @PutMapping("/link-requests/{companyId}")
+    @Transactional
+    public ResponseEntity<?> editLinkRequest(@PathVariable Long companyId, @RequestBody LinkRequestInput body,
+                                             Authentication authentication) {
+        Coordinator coordinator = current(authentication);
+        if (coordinator == null) return noProfile();
+        Company c = linkService.ownRequest(companyId, coordinator);
+        if (c == null) return ResponseEntity.status(404).body("Request not found.");
+        if (body == null) return bad("Nothing to save.");
+        FieldErrors errors = linkService.validate(body, false);
+        if (!errors.isEmpty()) return errors.toResponse();
+        try {
+            linkService.edit(c, body);
+        } catch (ActionException e) {
+            return e.toResponse();
+        }
+        return ResponseEntity.ok(new ReviewResult("pending"));
+    }
+
+    @PostMapping("/link-requests/{companyId}/approve")
+    @Transactional
+    public ResponseEntity<?> approveLinkRequest(@PathVariable Long companyId, Authentication authentication) {
+        Coordinator coordinator = current(authentication);
+        if (coordinator == null) return noProfile();
+        Company c = linkService.ownRequest(companyId, coordinator);
+        if (c == null) return ResponseEntity.status(404).body("Request not found.");
+        try {
+            linkService.approve(c);
+        } catch (ActionException e) {
+            return e.toResponse();
+        }
+        return ResponseEntity.ok(new ReviewResult("approved"));
+    }
+
+    /** Idagdag ang mga department ng hiling sa company na nasa listahan na, sa halip na gumawa ng pangalawa */
+    @PostMapping("/link-requests/{companyId}/merge")
+    @Transactional
+    public ResponseEntity<?> mergeLinkRequest(@PathVariable Long companyId, @RequestParam Long into,
+                                              Authentication authentication) {
+        Coordinator coordinator = current(authentication);
+        if (coordinator == null) return noProfile();
+        Company c = linkService.ownRequest(companyId, coordinator);
+        if (c == null) return ResponseEntity.status(404).body("Request not found.");
+        try {
+            linkService.merge(c, into);
+        } catch (ActionException e) {
+            return e.toResponse();
+        }
+        return ResponseEntity.ok(new ReviewResult("merged"));
+    }
+
+    @PostMapping("/link-requests/{companyId}/reject")
+    @Transactional
+    public ResponseEntity<?> rejectLinkRequest(@PathVariable Long companyId,
+                                               @RequestBody(required = false) RejectRequest body,
+                                               Authentication authentication) {
+        Coordinator coordinator = current(authentication);
+        if (coordinator == null) return noProfile();
+        Company c = linkService.ownRequest(companyId, coordinator);
+        if (c == null) return ResponseEntity.status(404).body("Request not found.");
+        try {
+            linkService.reject(c, body == null ? null : body.reason());
+        } catch (ActionException e) {
+            return e.toResponse();
+        }
+        return ResponseEntity.ok(new ReviewResult("rejected"));
+    }
+
+    // ---------------------------------------------------------------------
 
     /** student | company_link | coordinator */
     private static String sourceOf(Department d) {
@@ -209,7 +295,8 @@ public class CompanyRequestController {
 
     /** Dapat sa coordinator ang department, hiling ng student, at pending pa */
     private ResponseEntity<?> check(Department d, Coordinator coordinator) {
-        if (d == null) return ResponseEntity.notFound().build();
+        // Ang bagong hiling mula sa link ay sa buong company sinusuri (link-requests), hindi isa-isang department
+        if (d == null || d.getCompany().isHiddenRequest()) return ResponseEntity.notFound().build();
         if (!d.getCompany().getCoordinator().getId().equals(coordinator.getId())) {
             return ResponseEntity.status(403).body("You can only review your own students' requests.");
         }

@@ -25,6 +25,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  LinkRequestCard,
+  LinkRequestHistory,
+  LinkRequestSheet,
+} from "@/components/companies/LinkRequestReview";
 
 const BASE = "/coordinator/company-requests";
 
@@ -58,7 +63,7 @@ function Field({ label, value }: { label: string; value: string | null }) {
       <dt className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </dt>
-      <dd className="break-words text-sm">{value}</dd>
+      <dd className="break-words whitespace-pre-line wrap-anywhere text-sm">{value}</dd>
     </div>
   );
 }
@@ -120,6 +125,13 @@ export function RequestsPanel({ semesterId, data, loading, onChanged }: Props) {
   const requests = data?.requests ?? [];
   const pending = requests.filter((r) => r.status === "pending");
   const shown = pending;
+  // Hiling mula sa company link: buong company, sinusuri sa review sheet
+  const linkRequests = data?.linkRequests ?? [];
+  const linkPending = linkRequests.filter((r) => r.status === "pending");
+  const linkDone = linkRequests.filter((r) => r.status !== "pending");
+  const [reviewId, setReviewId] = useState<number | null>(null);
+  const reviewing = linkPending.find((r) => r.companyId === reviewId) ?? null;
+  const totalPending = pending.length + linkPending.length;
 
   async function after() {
     await onChanged();
@@ -178,9 +190,9 @@ export function RequestsPanel({ semesterId, data, loading, onChanged }: Props) {
       )}
 
       <p className="text-sm text-muted-foreground">
-        {pending.length === 0
+        {totalPending === 0
           ? "No pending requests."
-          : `${pending.length} pending request${pending.length === 1 ? "" : "s"} to review`}
+          : `${totalPending} pending request${totalPending === 1 ? "" : "s"} to review`}
       </p>
 
       {loading && (
@@ -191,7 +203,15 @@ export function RequestsPanel({ semesterId, data, loading, onChanged }: Props) {
         </div>
       )}
 
-      {!loading && shown.length === 0 && (
+      {!loading && linkPending.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {linkPending.map((r) => (
+            <LinkRequestCard key={r.companyId} request={r} onOpen={() => setReviewId(r.companyId)} />
+          ))}
+        </div>
+      )}
+
+      {!loading && shown.length === 0 && linkPending.length === 0 && (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
             <Inbox className="h-6 w-6 text-muted-foreground" />
@@ -354,6 +374,15 @@ export function RequestsPanel({ semesterId, data, loading, onChanged }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {!loading && <LinkRequestHistory requests={linkDone} />}
+
+      <LinkRequestSheet
+        request={reviewing}
+        natures={data?.natures ?? []}
+        onClose={() => setReviewId(null)}
+        onChanged={after}
+      />
     </div>
   );
 }
