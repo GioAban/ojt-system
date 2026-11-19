@@ -3,21 +3,26 @@ package com.iodev.practicum.service;
 import com.iodev.practicum.dto.ReportDtos.ApplyChange;
 import com.iodev.practicum.dto.ReportDtos.ApplyPreview;
 import com.iodev.practicum.dto.ReportDtos.ApplyPreviewRow;
+import com.iodev.practicum.dto.ReportDtos.Signatory;
+import com.iodev.practicum.dto.ReportDtos.SignatoryDefaults;
+import com.iodev.practicum.model.Semester;
+import com.iodev.practicum.repository.SemesterRepository;
 import com.iodev.practicum.model.Company;
 import com.iodev.practicum.model.Coordinator;
 import com.iodev.practicum.model.CoordinatorReportAudit;
 import com.iodev.practicum.model.CoordinatorSavedReport;
 import com.iodev.practicum.model.Department;
+import com.iodev.practicum.model.DocumentRequirement;
 import com.iodev.practicum.model.Student;
-import com.iodev.practicum.model.StudentDepartmentHistory;
+import com.iodev.practicum.repository.CompanyRepository;
 import com.iodev.practicum.repository.CoordinatorReportAuditRepository;
 import com.iodev.practicum.repository.DepartmentRepository;
-import com.iodev.practicum.repository.StudentDepartmentHistoryRepository;
+import com.iodev.practicum.repository.DocumentRequirementRepository;
 import com.iodev.practicum.repository.StudentRepository;
+import com.iodev.practicum.util.EvaluationAccess;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -26,26 +31,50 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * "Apply to system" mula sa report. Ito lang ang mga field na pwedeng isulat pabalik:
- * company at department ng student (paglipat lang), section/subject code, year,
- * at pangalan at posisyon ng supervisor ng department. Wala nang iba: hindi kailanman ang status,
- * oras, score, petsa o MOA. Tinitingnan ulit ang lahat sa server bago sumulat, at lahat o wala ang napapalitan.
+ * Mga pagbabago mula sa Edit mode ng report na isinusulat sa tunay na record kapag kinumpirma.
+ * Dumadaan ang bawat isa sa parehong service ng normal na form (iisang tuntunin), at tinitingnan ulit
+ * ang lahat dito bago sumulat. Lahat o wala ang naisusulat.
+ *
+ * Ito lang ang pwedeng isulat:
+ *   student: company at department (assignment), section (galing sa mga dati nang section), year,
+ *            start of training, petsa ng pagtatapos (tapos na lang na OJT), placement status (For Approval o Approved lang),
+ *            requirement status (Submitted -> Evaluated o Invalid lang), at pagbukas o pagsara ng evaluation
+ *   department: pangalan at posisyon ng supervisor
+ *   company: pangalan at address
+ * Hindi kailanman: score, oras, weekly at DTR, ang Evaluated na, Completed, o pag-alis ng company.
  */
 @Service
 public class ReportWriteBackService {
 
     private static final String STUDENT = "student";
     private static final String DEPARTMENT = "department";
-    private static final Map<String, String> YEARS = Map.of(
-            "1", "1st Year", "2", "2nd Year", "3", "3rd Year", "4", "4th Year", "5", "5th Year");
+    private static final String COMPANY = "company";
+    private static final String REQUIREMENT = "requirement";
+    private static final String SIGNATORY = "signatory";
+    /** Mga field ng student na binabago gaya ng Students page (StudentProfileService) */
+    private static final Set<String> PROFILE_FIELDS = Set.of(
+            "lastname", "firstname", "middleInitial", "studentNumber", "gender",
+            "contact", "email", "birthday", "address", "parent", "guardian");
 
     @Autowired private StudentRepository students;
     @Autowired private DepartmentRepository departments;
-    @Autowired private StudentDepartmentHistoryRepository history;
+    @Autowired private CompanyRepository companies;
+    @Autowired private DocumentRequirementRepository requirements;
     @Autowired private CoordinatorReportAuditRepository audits;
+    @Autowired private PlacementService placementService;
+    @Autowired private CompanyInfoService companyInfoService;
+    @Autowired private StudentStatusService studentStatusService;
+    @Autowired private RequirementReviewService requirementReviewService;
+    @Autowired private EvaluationAccessService evaluationAccessService;
+    @Autowired private OjtCompletionService ojtCompletionService;
+    @Autowired private StudentProfileService studentProfileService;
+    @Autowired private RequirementTitleService requirementTitleService;
+    @Autowired private SignatoryService signatoryService;
+    @Autowired private ReportSourceService reportSourceService;
+    @Autowired private SemesterRepository semesters;
 
-    /** Isang pagbabagong nasuri na; null ang write kapag may problema */
-    private record Checked(ApplyPreviewRow row, Runnable write) {}
+    /** Isang pagbabagong nasuri na */
+    private record Checked(ApplyChange change, ApplyPreviewRow row, PreparedChange prepared) {}
 
     public ApplyPreview preview(Coordinator coordinator, CoordinatorSavedReport report, List<ApplyChange> changes) {
         List<ApplyPreviewRow> rows = check(coordinator, report, changes).stream().map(Checked::row).toList();
@@ -59,10 +88,11 @@ public class ReportWriteBackService {
         if (rows.isEmpty() || rows.stream().anyMatch(r -> r.problem() != null)) return new ApplyPreview(rows, false);
 
         String actor = coordinator.getUser() == null ? null : coordinator.getUser().getFullname();
-        for (int i = 0; i < checked.size(); i++) {
-            checked.get(i).write().run();
-            ApplyChange change = changes.get(i);
-            ApplyPreviewRow row = rows.get(i);
+        for (Checked c : checked) {
+            if (c.prepared() == null || c.prepared().unchanged()) continue;
+            c.prepared().run();
+            ApplyChange change = c.change();
+            ApplyPreviewRow row = c.row();
             CoordinatorReportAudit a = new CoordinatorReportAudit();
             a.setCoordinatorId(coordinator.getId());
             a.setActorName(actor);
@@ -71,7 +101,7 @@ public class ReportWriteBackService {
             a.setTargetType(change.target());
             a.setTargetId(change.id());
             a.setTargetLabel(row.who());
-            a.setField(change.field());
+            a.setField(change.refId() == null ? change.field() : change.field() + ":" + change.refId());
             a.setOldValue(row.oldValue());
             a.setNewValue(row.newValue());
             a.setAffectedCount(row.affected());
@@ -80,25 +110,36 @@ public class ReportWriteBackService {
         return null;
     }
 
+    // ---------------------------------------------------------------------
+
     private List<Checked> check(Coordinator coordinator, CoordinatorSavedReport report, List<ApplyChange> changes) {
         List<Checked> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         // Ilang student ang papasok sa bawat department sa kahilingang ito
         Map<Long, Integer> incoming = new HashMap<>();
+        // Bagong pangalan o posisyon ng supervisor bawat department o company (magkapares ang dalawa)
+        Map<String, String> supervisorPartners = new HashMap<>();
         for (ApplyChange c : changes) {
-            String key = c.target() + ":" + c.id() + ":" + c.field();
-            if (!seen.add(key)) {
-                out.add(problem(c, "This record appears more than once in the list."));
-            } else if (STUDENT.equals(c.target())) {
-                out.add(checkStudent(coordinator, report, c, incoming));
-            } else if (DEPARTMENT.equals(c.target())) {
-                out.add(checkDepartment(coordinator, report, c));
-            } else {
-                out.add(problem(c, "That record can't be changed from a report."));
+            if (c.id() != null) supervisorPartners.put(c.target() + ":" + c.id() + ":" + c.field(), c.value());
+        }
+
+        for (ApplyChange c : changes) {
+            String dedupe = c.target() + ":" + c.id() + ":" + c.field() + ":" + c.refId();
+            if (!seen.add(dedupe)) {
+                out.add(problem(c, "", "This record appears more than once in the list."));
+                continue;
             }
+            if (STUDENT.equals(c.target())) out.add(checkStudent(coordinator, report, c, incoming));
+            else if (DEPARTMENT.equals(c.target())) out.add(checkDepartment(coordinator, report, c, supervisorPartners));
+            else if (COMPANY.equals(c.target())) out.add(checkCompany(coordinator, report, c, supervisorPartners));
+            else if (REQUIREMENT.equals(c.target())) out.add(checkRequirementTitle(coordinator, report, c));
+            else if (SIGNATORY.equals(c.target())) out.add(checkSignatory(coordinator, report, c));
+            else out.add(problem(c, "", "That record can't be changed from a report."));
         }
         return out;
     }
+
+    // ---- Student --------------------------------------------------------
 
     private Checked checkStudent(Coordinator coordinator, CoordinatorSavedReport report, ApplyChange c,
                                  Map<Long, Integer> incoming) {
@@ -107,32 +148,80 @@ public class ReportWriteBackService {
         if (s == null || !s.getCoordinator().getId().equals(coordinator.getId())
                 || !s.getSemester().getId().equals(report.getSemesterId())
                 || Boolean.TRUE.equals(s.getIsArchived())) {
-            return problem(c, "Student not found in this report's semester.");
+            return problem(c, "", "Student not found in this report's semester.");
         }
-        String who = s.getLastname() + ", " + s.getFirstname();
+        String who = nz(s.getLastname()) + ", " + nz(s.getFirstname());
         String value = clean(c.value());
-        return switch (c.field() == null ? "" : c.field()) {
-            case "section" -> {
-                String old = nz(s.getSubjectCode());
-                if (value.isEmpty()) yield row(who, "Section / Subject code", old, value, 1, "Section is required.");
-                if (value.length() > 50) yield row(who, "Section / Subject code", old, value, 1, "Section is too long (max 50 characters).");
-                yield simple(c, who, "Section / Subject code", old, value, () -> {
-                    s.setSubjectCode(value);
-                    students.save(s);
-                });
-            }
-            case "year" -> {
-                String old = nz(s.getYear());
-                String year = year(value);
-                if (year == null) yield row(who, "Year", old, value, 1, "Year must be from 1st Year to 5th Year.");
-                yield simple(c, who, "Year", old, year, () -> {
-                    s.setYear(year);
-                    students.save(s);
-                });
-            }
-            case "assignment" -> checkAssignment(coordinator, s, who, c, incoming);
-            default -> row(who, "This field", "", value, 0, "That field can't be changed from a report.");
-        };
+        String field = c.field() == null ? "" : c.field();
+
+        try {
+            return switch (field) {
+                case "assignment" -> checkAssignment(coordinator, s, who, c, incoming);
+                case "section" -> {
+                    String old = nz(s.getSubjectCode());
+                    if (stale(c, old)) yield changed(c, who, "Section / Subject code", old, value, 1);
+                    // Dagdag sa report (napagkasunduan): ang dati nang mga section lang
+                    if (!value.isEmpty() && !sections(coordinator, report).contains(value)) {
+                        throw ActionException.bad("Choose one of the existing sections.");
+                    }
+                    yield ok(c, who, studentProfileService.check(s, "course", value));
+                }
+                case "year" -> {
+                    String old = nz(s.getYear());
+                    if (stale(c, old)) yield changed(c, who, "Year", old, value, 1);
+                    if (value.isEmpty()) throw ActionException.bad("Choose a year from 1st Year to 5th Year.");
+                    yield ok(c, who, studentProfileService.check(s, "year", value));
+                }
+                case "startDate" -> {
+                    String old = nz(s.getStartTrainingDate());
+                    if (stale(c, old)) yield changed(c, who, "Start of training", old, value, 1);
+                    yield ok(c, who, companyInfoService.checkStartDate(s, value));
+                }
+                case "completedDate" -> {
+                    String old = nz(s.getCompletedDate());
+                    if (stale(c, old)) yield changed(c, who, "End of training", old, value, 1);
+                    yield ok(c, who, ojtCompletionService.checkCompletedDateFromReport(s, value));
+                }
+                case "status" -> {
+                    String old = nz(s.getStatus());
+                    if (stale(c, old)) yield changed(c, who, "Status", old, value, 1);
+                    yield ok(c, who, studentStatusService.checkPlacement(s, value));
+                }
+                case "requirement" -> {
+                    DocumentRequirement r = c.refId() == null ? null : requirements.findById(c.refId()).orElse(null);
+                    if (r == null || !r.getCoordinator().getId().equals(coordinator.getId())
+                            || !r.getSemester().getId().equals(s.getSemester().getId())) {
+                        throw ActionException.bad("Requirement not found in this report's semester.");
+                    }
+                    String old = requirementReviewService.currentStatus(s, r);
+                    if (stale(c, old)) {
+                        yield changed(c, who, nz(r.getTitle()), RequirementReviewService.reportLabel(old), value, 1);
+                    }
+                    yield ok(c, who, requirementReviewService.checkFromReport(s, r, value));
+                }
+                case "midterm", "final" -> {
+                    String key = field.equals("midterm") ? EvaluationAccess.MIDTERM : EvaluationAccess.FINAL;
+                    String old = EvaluationAccess.isOpen(s, key) ? "open" : "closed";
+                    if (stale(c, old)) yield changed(c, who, EvaluationAccess.titleOf(key), old, value, 1);
+                    if (!value.equals("open") && !value.equals("closed")) {
+                        throw ActionException.bad("Choose whether to open or close the evaluation.");
+                    }
+                    yield ok(c, who, evaluationAccessService.checkFromReport(
+                            coordinator.getId(), s, report.getSemesterId(), key, value.equals("open")));
+                }
+                default -> {
+                    if (!PROFILE_FIELDS.contains(field)) yield problem(c, who, "That field can't be changed from a report.");
+                    // Parehong tuntunin at mensahe ng Students page
+                    String old = StudentProfileService.currentValue(s, field);
+                    if (stale(c, old)) yield changed(c, who, StudentProfileService.labelOf(field), old, value, 1);
+                    yield ok(c, who, studentProfileService.check(s, field, value));
+                }
+            };
+        } catch (ActionException e) {
+            return new Checked(c, new ApplyPreviewRow(c.key(), who, labelOf(field),
+                    PROFILE_FIELDS.contains(field) ? StudentProfileService.currentValue(s, field) : "", value, 1,
+                    e.getMessage()), null);
+        }
     }
 
     private Checked checkAssignment(Coordinator coordinator, Student s, String who, ApplyChange c,
@@ -140,133 +229,222 @@ public class ReportWriteBackService {
         final String label = "Company and department";
         Department current = s.getDepartment();
         String old = current == null ? "" : placement(current);
-        // Ang unang pag-assign at ang pag-alis ay nakakabit sa status: sa Students page lang ang mga iyon
-        if (current == null) {
-            return row(who, label, old, "", 1, "This student has no company yet. Assign the first one on the Students page.");
-        }
-        Department target;
+        String oldId = current == null ? "" : String.valueOf(current.getId());
+        if (stale(c, oldId)) return changed(c, who, label, old, "", 1);
+
+        Long departmentId;
         try {
-            target = departments.findById(Long.valueOf(clean(c.value()))).orElse(null);
+            departmentId = Long.valueOf(clean(c.value()));
         } catch (NumberFormatException e) {
-            target = null;
+            return new Checked(c, new ApplyPreviewRow(c.key(), who, label, old, "", 1, "Choose a company."), null);
         }
-        if (target == null) return row(who, label, old, "", 1, "Choose a department.");
-        String next = placement(target);
+        // Dagdag sa report: hindi inililipat ang tapos na
         if ("Completed".equalsIgnoreCase(s.getStatus())) {
-            return row(who, label, old, next, 1, "This student has completed the OJT, so the company can't be changed.");
+            return new Checked(c, new ApplyPreviewRow(c.key(), who, label, old, "", 1,
+                    "This student has completed the OJT, so the company can't be changed."), null);
         }
-        if (c.expectedOld() != null && !c.expectedOld().equals(String.valueOf(current.getId()))) {
-            return row(who, label, old, next, 1, changedMessage());
+        try {
+            int coming = incoming.getOrDefault(departmentId, 0);
+            PlacementService.Target target = placementService.check(coordinator, s, departmentId, coming);
+            String next = placement(target.department());
+            if (target.unchanged()) return ok(c, who, new PreparedChange(label, old, next, 1, null));
+            incoming.merge(departmentId, 1, Integer::sum);
+            return ok(c, who, new PreparedChange(label, old, next, 1,
+                    () -> placementService.assign(coordinator, s, departmentId)));
+        } catch (ActionException e) {
+            return new Checked(c, new ApplyPreviewRow(c.key(), who, label, old, "", 1, e.getMessage()), null);
         }
-        if (target.getId().equals(current.getId())) return row(who, label, old, next, 1, "There's nothing to change.");
-
-        Company company = target.getCompany();
-        if (!company.getCoordinator().getId().equals(coordinator.getId())) {
-            return row(who, label, old, "", 1, "That company doesn't belong to you.");
-        }
-        if (!company.getSemester().getId().equals(s.getSemester().getId())) {
-            return row(who, label, old, next, 1, "That company belongs to a different semester.");
-        }
-        if (Boolean.TRUE.equals(company.getIsArchived()) || Boolean.TRUE.equals(target.getIsArchived())) {
-            return row(who, label, old, next, 1, "That company or department is archived.");
-        }
-        if (!"approved".equalsIgnoreCase(target.getStatus())) {
-            return row(who, label, old, next, 1, "That department isn't approved yet.");
-        }
-        long filled = 0;
-        for (Object[] count : students.countByDepartmentIds(List.of(target.getId()))) filled = (Long) count[1];
-        int coming = incoming.merge(target.getId(), 1, Integer::sum);
-        int slots = target.getSlots() == null ? 0 : target.getSlots();
-        if (filled + coming > slots) return row(who, label, old, next, 1, "This department has no slots left.");
-
-        Department destination = target;
-        return new Checked(new ApplyPreviewRow(who, label, old, next, 1, null), () -> transfer(s, destination));
     }
 
-    /** Parehong tala ng kasaysayan sa karaniwang pag-assign; hindi ginagalaw ang status */
-    private void transfer(Student s, Department target) {
-        Timestamp now = new Timestamp(System.currentTimeMillis());
-        List<StudentDepartmentHistory> open = history.findByStudentIdAndEndedAtIsNull(s.getId());
-        open.forEach(h -> h.setEndedAt(now));
-        history.saveAll(open);
+    // ---- Department -----------------------------------------------------
 
-        StudentDepartmentHistory entry = new StudentDepartmentHistory();
-        entry.setStudent(s);
-        entry.setDepartment(target);
-        entry.setType("transferred");
-        entry.setStartedAt(now);
-        history.save(entry);
-
-        s.setDepartment(target);
-        students.save(s);
-    }
-
-    private Checked checkDepartment(Coordinator coordinator, CoordinatorSavedReport report, ApplyChange c) {
+    private Checked checkDepartment(Coordinator coordinator, CoordinatorSavedReport report, ApplyChange c,
+                                    Map<String, String> partners) {
         Department d = c.id() == null ? null : departments.findById(c.id()).orElse(null);
-        if (d == null || !d.getCompany().getCoordinator().getId().equals(coordinator.getId())
+        if (d == null || d.getCompany().isHiddenRequest() || !d.getCompany().getCoordinator().getId().equals(coordinator.getId())
                 || !d.getCompany().getSemester().getId().equals(report.getSemesterId())) {
-            return problem(c, "Department not found in this report's semester.");
+            return problem(c, "", "Department not found in this report's semester.");
         }
-        long filled = 0;
-        for (Object[] count : students.countByDepartmentIds(List.of(d.getId()))) filled = (Long) count[1];
-        int affected = (int) filled;
         String who = placement(d);
-        String value = clean(c.value());
-        return switch (c.field() == null ? "" : c.field()) {
-            case "supervisorName" -> {
-                String old = nz(d.getSupervisorFullname());
-                if (value.isEmpty()) yield row(who, "Supervisor name", old, value, affected, "The supervisor's name is required.");
-                if (value.length() > 255) yield row(who, "Supervisor name", old, value, affected, "The supervisor's name is too long (max 255 characters).");
-                yield departmentChange(c, who, "Supervisor name", old, value, affected, () -> {
-                    d.setSupervisorFullname(value);
-                    departments.save(d);
-                });
+        String field = c.field() == null ? "" : c.field();
+        if (field.equals("name")) {
+            String old = nz(d.getName());
+            if (old.equalsIgnoreCase("N/A")) {
+                return problem(c, who, "The N/A placeholder isn't a real department, so it can't be renamed.");
             }
-            case "supervisorPosition" -> {
-                String old = nz(d.getSupervisorPosition());
-                if (value.length() > 255) yield row(who, "Supervisor position", old, value, affected, "The position is too long (max 255 characters).");
-                yield departmentChange(c, who, "Supervisor position", old, value, affected, () -> {
-                    d.setSupervisorPosition(value);
-                    departments.save(d);
-                });
+            if (stale(c, old)) return changed(c, who, "Department name", old, clean(c.value()), 0);
+            try {
+                return ok(c, who, companyInfoService.checkDepartment(d, "name", c.value(), null));
+            } catch (ActionException e) {
+                return new Checked(c, new ApplyPreviewRow(c.key(), who, "Department name", old, clean(c.value()), 0,
+                        e.getMessage()), null);
             }
-            default -> row(who, "This field", "", value, 0, "That field can't be changed from a report.");
+        }
+        if (!field.equals("supervisorName") && !field.equals("supervisorPosition")) {
+            return problem(c, who, "That field can't be changed from a report.");
+        }
+        String old = field.equals("supervisorName")
+                ? SupervisorResolver.clean(d.getSupervisorFullname())
+                : SupervisorResolver.clean(d.getSupervisorPosition());
+        if (stale(c, old)) return changed(c, who, labelOf(field), old, clean(c.value()), 0);
+
+        String partnerField = field.equals("supervisorName") ? "supervisorPosition" : "supervisorName";
+        String partner = partners.get(DEPARTMENT + ":" + d.getId() + ":" + partnerField);
+        try {
+            return ok(c, who, companyInfoService.checkDepartment(d, field, c.value(), partner));
+        } catch (ActionException e) {
+            return new Checked(c, new ApplyPreviewRow(c.key(), who, labelOf(field), old, clean(c.value()), 0,
+                    e.getMessage()), null);
+        }
+    }
+
+    // ---- Company --------------------------------------------------------
+
+    private Checked checkCompany(Coordinator coordinator, CoordinatorSavedReport report, ApplyChange c,
+                                 Map<String, String> partners) {
+        Company co = c.id() == null ? null : companies.findById(c.id()).orElse(null);
+        if (co == null || co.isHiddenRequest() || !co.getCoordinator().getId().equals(coordinator.getId())
+                || !co.getSemester().getId().equals(report.getSemesterId())) {
+            return problem(c, "", "Company not found in this report's semester.");
+        }
+        String who = nz(co.getName());
+        String field = c.field() == null ? "" : c.field();
+        if (field.equals("supervisorName") || field.equals("supervisorPosition")) {
+            // Immediate supervisor ng company (ang ipinapakita kapag walang sariling supervisor ang department)
+            String old = SupervisorResolver.clean(field.equals("supervisorName") ? co.getImsupFullname() : co.getImsupPosition());
+            String label = field.equals("supervisorName") ? "Immediate supervisor name" : "Immediate supervisor position";
+            if (stale(c, old)) return changed(c, who, label, old, clean(c.value()), 0);
+            String partnerField = field.equals("supervisorName") ? "supervisorPosition" : "supervisorName";
+            String partner = partners.get(COMPANY + ":" + co.getId() + ":" + partnerField);
+            try {
+                return ok(c, who, companyInfoService.checkCompanySupervisor(co, field, c.value(), partner));
+            } catch (ActionException e) {
+                return new Checked(c, new ApplyPreviewRow(c.key(), who, label, old, clean(c.value()), 0, e.getMessage()), null);
+            }
+        }
+        if (!field.equals("name") && !field.equals("address")) {
+            return problem(c, who, "That field can't be changed from a report.");
+        }
+        String old = field.equals("name") ? nz(co.getName()) : nz(co.getAddress());
+        if (stale(c, old)) return changed(c, who, labelOf(field), old, clean(c.value()), 0);
+        try {
+            return ok(c, who, companyInfoService.checkCompany(co, field, c.value()));
+        } catch (ActionException e) {
+            return new Checked(c, new ApplyPreviewRow(c.key(), who, labelOf(field), old, clean(c.value()), 0,
+                    e.getMessage()), null);
+        }
+    }
+
+    // ---- Requirement ----------------------------------------------------
+
+    private Checked checkRequirementTitle(Coordinator coordinator, CoordinatorSavedReport report, ApplyChange c) {
+        DocumentRequirement r = c.id() == null ? null : requirements.findById(c.id()).orElse(null);
+        if (r == null || !r.getCoordinator().getId().equals(coordinator.getId())
+                || !r.getSemester().getId().equals(report.getSemesterId())) {
+            return problem(c, "", "Requirement not found in this report's semester.");
+        }
+        String who = nz(r.getTitle());
+        if (!"title".equals(c.field())) return problem(c, who, "That field can't be changed from a report.");
+        String old = nz(r.getTitle());
+        if (stale(c, old)) return changed(c, who, "Requirement title", old, clean(c.value()), 0);
+        try {
+            PreparedChange p = requirementTitleService.checkRename(r, c.value());
+            // Lahat ng student ng coordinator sa semester ang may ganitong requirement
+            int affected = students.findForTracking(coordinator.getId(), report.getSemesterId()).size();
+            return ok(c, who, new PreparedChange(p.label(), p.oldValue(), p.newValue(), affected, p.write()));
+        } catch (ActionException e) {
+            return new Checked(c, new ApplyPreviewRow(c.key(), who, "Requirement title", old, clean(c.value()), 0,
+                    e.getMessage()), null);
+        }
+    }
+
+    // ---- Pirmahan ------------------------------------------------------
+
+    private Checked checkSignatory(Coordinator coordinator, CoordinatorSavedReport report, ApplyChange c) {
+        String field = c.field() == null ? "" : c.field();
+        String who = "Signatories (all your reports)";
+        Semester semester = semesters.findById(report.getSemesterId()).orElse(null);
+        if (semester == null) return problem(c, who, "Semester not found.");
+        String fallback = defaultSignatory(reportSourceService.context(coordinator, semester).defaults(), field);
+        try {
+            PreparedChange p = signatoryService.check(coordinator.getId(), field, c.value(), fallback);
+            if (stale(c, p.oldValue())) return changed(c, who, p.label(), p.oldValue(), clean(c.value()), 0);
+            return ok(c, who, p);
+        } catch (ActionException e) {
+            return new Checked(c, new ApplyPreviewRow(c.key(), who, SignatoryService.labelOf(field), "", clean(c.value()), 0,
+                    e.getMessage()), null);
+        }
+    }
+
+    /** Ang default ng system para sa "role.name" o "role.title" */
+    private static String defaultSignatory(SignatoryDefaults d, String field) {
+        String[] parts = field.split("\\.");
+        if (d == null || parts.length != 2) return "";
+        Signatory s = switch (parts[0]) {
+            case "prepared" -> d.prepared();
+            case "programHead" -> d.programHead();
+            case "dean" -> d.dean();
+            case "chair" -> d.chair();
+            default -> null;
+        };
+        if (s == null) return "";
+        return nz(parts[1].equals("name") ? s.name() : s.title());
+    }
+
+    // ---------------------------------------------------------------------
+
+    private List<String> sections(Coordinator coordinator, CoordinatorSavedReport report) {
+        return students.findForTracking(coordinator.getId(), report.getSemesterId()).stream()
+                .map(s -> nz(s.getSubjectCode()))
+                .filter(v -> !v.isEmpty())
+                .distinct()
+                .toList();
+    }
+
+    private static Checked ok(ApplyChange c, String who, PreparedChange p) {
+        return new Checked(c, new ApplyPreviewRow(c.key(), who, p.label(), p.oldValue(), p.newValue(),
+                (int) p.affected(), null), p);
+    }
+
+    /** Naiba na ang nasa system mula nang mabuo ang report */
+    private static boolean stale(ApplyChange c, String current) {
+        return c.expectedOld() != null && !clean(c.expectedOld()).equals(clean(current));
+    }
+
+    private static Checked changed(ApplyChange c, String who, String label, String old, String value, int affected) {
+        return new Checked(c, new ApplyPreviewRow(c.key(), who, label, old, value, affected,
+                "This changed in the system after the report was generated. Regenerate the report and review it again."),
+                null);
+    }
+
+    private static Checked problem(ApplyChange c, String who, String message) {
+        return new Checked(c, new ApplyPreviewRow(c.key(), who, labelOf(c.field()), "", clean(c.value()), 0, message),
+                null);
+    }
+
+    private static String labelOf(String field) {
+        return switch (field == null ? "" : field) {
+            case "assignment" -> "Company and department";
+            case "section" -> "Section / Subject code";
+            case "year" -> "Year";
+            case "startDate" -> "Start of training";
+            case "title" -> "Requirement title";
+            case "completedDate" -> "End of training";
+            case "status" -> "Status";
+            case "requirement" -> "Requirement";
+            case "midterm" -> "Midterm Evaluation";
+            case "final" -> "Final Evaluation";
+            case "supervisorName" -> "Supervisor name";
+            case "supervisorPosition" -> "Supervisor position";
+            case "name" -> "Company name";
+            case "address" -> "Company address";
+            default -> field == null ? "" : field;
         };
     }
 
-    private Checked simple(ApplyChange c, String who, String label, String old, String value, Runnable write) {
-        return departmentChange(c, who, label, old, value, 1, write);
-    }
-
-    private Checked departmentChange(ApplyChange c, String who, String label, String old, String value,
-                                     int affected, Runnable write) {
-        if (c.expectedOld() != null && !clean(c.expectedOld()).equals(old)) {
-            return row(who, label, old, value, affected, changedMessage());
-        }
-        if (old.equals(value)) return row(who, label, old, value, affected, "There's nothing to change.");
-        return new Checked(new ApplyPreviewRow(who, label, old, value, affected, null), write);
-    }
-
-    private static Checked row(String who, String label, String old, String value, int affected, String problem) {
-        return new Checked(new ApplyPreviewRow(who, label, old, value, affected, problem), null);
-    }
-
-    private static Checked problem(ApplyChange c, String message) {
-        return row("", c.field() == null ? "" : c.field(), "", clean(c.value()), 0, message);
-    }
-
-    private static String changedMessage() {
-        return "This changed in the system after the report was generated. Regenerate the report and review it again.";
-    }
-
     private static String placement(Department d) {
-        return nz(d.getCompany().getName()) + " – " + nz(d.getName());
-    }
-
-    /** "4", "4th", "4th year" -> "4th Year"; null kung hindi valid (parehong tuntunin ng Students page) */
-    private static String year(String raw) {
-        String digit = raw.replaceAll("[^0-9]", "");
-        return YEARS.get(digit);
+        String dept = SupervisorResolver.clean(d.getName());
+        return nz(d.getCompany().getName()) + (dept.isEmpty() ? "" : " – " + dept);
     }
 
     private static String clean(String v) {

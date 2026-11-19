@@ -1,38 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { notify } from "@/lib/notify";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useSignatoryControls } from "@/hooks/useSignatoryControls";
+import { useEditSession } from "@/hooks/useEditSession";
 import { useReportDraft } from "@/hooks/useReportDraft";
 import { useUndoRedo } from "@/hooks/useUndoRedo";
 import {
-  NONE, buildListContent, buildListRows, cellOf, defaultListView, filterOptions, listCellId, parseListContent, templateColumns,
-  templateFilters, templateInfo, visibleUnits,
+  GROUP_BY_OPTIONS, LIST_PAGE_DEFAULTS, NONE, PERSONAL_COLUMNS, buildListContent, buildListRows, cellOf, defaultListView,
+  filterOptions, parseListContent, templateColumns, templateFilters, templateGroupingLabel, templateInfo, visibleUnits,
 } from "@/lib/listTemplates";
 import { listLayout } from "@/lib/listLayout";
 import { paperSize } from "@/lib/paperExport";
 import { downloadExcel, listExcel } from "@/lib/reportExcel";
-import { listAfterApply, listApplyBlock, listApplyItems, type ApplyItem } from "@/lib/reportWriteBack";
-import { cn } from "@/lib/utils";
+import { listCellSpec } from "@/lib/reportFields";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ListSheet, type ListEditBindings } from "@/components/reports/ListSheet";
 import { ReportPreviewDialog } from "@/components/reports/ReportPreviewDialog";
-import { ApplyToSystemDialog } from "@/components/reports/editor/ApplyToSystemDialog";
-import { CellActions, CellActionsBar, type CellInfo } from "@/components/reports/editor/CellActions";
-import { CellSheet } from "@/components/reports/editor/CellSheet";
-import { ColumnPicker } from "@/components/reports/editor/ColumnPicker";
+import {
+  AdvancedControl, ColumnsControl, FixedInfo, PageControl, ReportSettingsLayout, SelectField, SettingsSection,
+  SignatoriesControl, TextAreaField, TextField,
+} from "@/components/reports/settings/ReportSettingsSidebar";
 import { EDIT_CSS } from "@/components/reports/editor/editCss";
-import { EditorContext, type ActiveCell, type EditorApi } from "@/components/reports/editor/editorContext";
 import { EditorToolbar } from "@/components/reports/editor/EditorToolbar";
 import { PaperSurface, MAX_ZOOM, MIN_ZOOM, type Zoom } from "@/components/reports/editor/PaperSurface";
 import { ReportHeader, ReportLoadState } from "@/components/reports/editor/ReportHeader";
-import type { CellDef } from "@/lib/hteCells";
-import type { ListContent, ListTemplate, ReportSource } from "@/types/reports";
-
-const SELECT =
-  "mt-1 block h-9 w-full rounded-md border bg-background px-3 text-base outline-none pointer-coarse:h-11 md:text-sm focus-visible:ring-2 focus-visible:ring-ring";
-const LABEL = "block text-xs font-medium text-muted-foreground";
+import { DEFAULT_DISPLAY, type ListContent, type ListGroupBy, type ListTemplate, type PendingChange, type ReportSource } from "@/types/reports";
 
 /** Stable na buildContent para sa bawat template: isang function bawat uri */
 const BUILDERS = new Map<ListTemplate, (source: ReportSource) => ListContent>();
@@ -45,39 +39,43 @@ function builderFor(template: ListTemplate) {
   return fn;
 }
 
-/** "l:<row>:<col>" -> row at column */
-function parseCellId(id: string) {
-  const [, rowId, col] = id.split(":");
-  return { rowId, col };
+/** Mga column na sumusunod sa company at department ng student */
+const PLACEMENT_COLUMNS = ["company", "department", "supervisor", "supervisorPosition", "status", "deployment"];
+
+/**
+ * Pagkatapos maisulat sa system: binubuo ulit ang mga row mula sa bagong datos. Ang mga lumang edit sa report lang
+ * (mula sa dating bersyon) sa mga cell na binago ay inaalis, para lumabas ang bagong halaga.
+ */
+function afterCommit(cur: ListContent, fresh: ReportSource, changes: PendingChange[]): ListContent {
+  const students = new Set(changes.filter((x) => x.target === "student").map((x) => x.id));
+  const recordsChanged = changes.some((x) => x.target !== "student");
+  const rows = buildListRows(cur.template, fresh);
+  const overrides: ListContent["overrides"] = {};
+  for (const row of rows) {
+    const edits = cur.overrides[row.id];
+    if (!edits) continue;
+    if (row.refs && students.has(row.refs.studentId)) continue;
+    const kept = Object.fromEntries(Object.entries(edits).filter(([col]) => !(recordsChanged && PLACEMENT_COLUMNS.includes(col))));
+    if (Object.keys(kept).length > 0) overrides[row.id] = kept;
+  }
+  return { ...cur, rows, overrides, generatedAt: Date.now() };
 }
 
 /** Tagabuo ng listahan: mga filter sa gilid, ang papel sa kanan (o sa ilalim sa telepono) */
 export function ListBuilder({ template, reportId }: { template: ListTemplate; reportId: number }) {
-  const { content, source, update, get, status, loadError, retry, gone, title, setTitle, saveNow, replaceSource } =
+  const { content, source, update, get, status, loadError, retry, gone, title, setTitle, replaceSource } =
     useReportDraft<ListContent>({ reportId, build: builderFor(template), parse: parseListContent });
   const history = useUndoRedo<ListContent>();
   const touch = useIsMobile();
 
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [scale, setScale] = useState(1);
-  const [confirm, setConfirm] = useState<"regenerate" | "clear" | null>(null);
+  const [confirm, setConfirm] = useState<"regenerate" | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [currentCell, setCurrentCell] = useState<string | null>(null);
-  const [sheetCell, setSheetCell] = useState<string | null>(null);
-  const [applying, setApplying] = useState<ApplyItem[] | null>(null);
-
-  const active = useRef<ActiveCell | null>(null);
-
-  const api = useMemo<EditorApi>(() => ({
-    touch,
-    onCellFocus: (info) => setCurrentCell(info.id),
-    onCellBlur: () => {},
-    openSheet: (id) => { setCurrentCell(id); setSheetCell(id); },
-    focusControls: () => {},
-    getActive: () => active.current,
-    setActive: (cell) => { active.current = cell; },
-  }), [touch]);
+  // Sidebar ng mga setting: bukas sa desktop, sarado (bottom sheet) sa telepono
+  const [settingsOpen, setSettingsOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 768);
+  // Pirmahan sa dulo: naka-save sa device lang
+  const sign = useSignatoryControls(reportId, { hasBuiltIn: false, title: title || templateInfo(template).title });
 
   // Nagbago ba ang datos ng system mula nang buuin ang listahan?
   const stale = useMemo(() => {
@@ -91,6 +89,17 @@ export function ListBuilder({ template, reportId }: { template: ListTemplate; re
     history.record(cur, key);
     update(fn(cur));
   };
+
+  const session = useEditSession<ListContent>({
+    reportId,
+    source,
+    get,
+    mutate,
+    onCommitted: (fresh, changes) => {
+      replaceSource(fresh);
+      mutate((cur) => afterCommit(cur, fresh, changes));
+    },
+  });
 
   const undoRef = useRef<(redo: boolean) => void>(() => {});
   useEffect(() => {
@@ -126,8 +135,10 @@ export function ListBuilder({ template, reportId }: { template: ListTemplate; re
   const units = visibleUnits(c);
   const shown = units.filter((u) => u.kind === "row").length;
   const paperWidth = paperSize(c.settings.orientation, c.settings.paper).width;
-  const pending = editMode ? listApplyItems(c, source) : [];
   const editedCount = Object.values(c.overrides).reduce((n, e) => n + Object.keys(e).length, 0);
+  const editMode = session.editMode;
+  const manual = { items: sign.items, showBuiltIn: false };
+  const defaults = defaultListView(template);
 
   const setFilter = (key: string, value: string) =>
     mutate((cur) => {
@@ -137,87 +148,41 @@ export function ListBuilder({ template, reportId }: { template: ListTemplate; re
       return { ...cur, filters };
     });
 
-  const toggleColumn = (key: string, on: boolean) =>
-    mutate((cur) => ({
-      ...cur,
-      columns: on ? [...cur.columns, key] : cur.columns.filter((k) => k !== key),
-    }));
+  const setColumns = (columns: string[]) => mutate((cur) => ({ ...cur, columns }), "columns");
 
-  /** Isang edit sa cell; kung kapareho na ng datos, wala nang edit */
-  const setCell = (rowId: string, col: string, value: string) => {
-    const row = get()?.rows.find((r) => r.id === rowId);
-    if (!row) return;
-    const live = row.cells[col] ?? "";
+  /** Edit sa report lang ng isang cell; null o kapareho ng system = alisin */
+  const setOverride = (rowId: string, col: string, value: string | null) =>
     mutate((cur) => {
+      const row = cur.rows.find((r) => r.id === rowId);
       const edits = { ...(cur.overrides[rowId] ?? {}) };
-      if (value === live) delete edits[col];
+      if (value === null || value === (row?.cells[col] ?? "")) delete edits[col];
       else edits[col] = value;
       const overrides = { ...cur.overrides };
       if (Object.keys(edits).length > 0) overrides[rowId] = edits;
       else delete overrides[rowId];
       return { ...cur, overrides };
-    }, listCellId(rowId, col));
-  };
+    }, `override:${rowId}:${col}`);
 
-  const labelOf = (id: string) => {
-    const { rowId, col } = parseCellId(id);
-    const row = c.rows.find((r) => r.id === rowId);
-    const name = columns.find((x) => x.key === col)?.label ?? "Cell";
-    return row ? `${name}, ${cellOf(c, row, "name")}` : name;
-  };
+  const labelOf = (col: string) => columns.find((x) => x.key === col)?.label ?? "Cell";
 
-  const bindings: ListEditBindings = { onText: setCell, labelOf };
-
-  const cellDefs: CellDef[] = editMode
-    ? units.flatMap((u) => (u.kind === "row"
-      ? columns.filter((col) => c.columns.includes(col.key)).map((col) => {
-          const id = listCellId(u.row.id, col.key);
-          return { id, label: labelOf(id), value: cellOf(c, u.row, col.key) };
-        })
-      : []))
-    : [];
-
-  const cellInfo = (id: string | null): CellInfo | null => {
-    if (!id) return null;
-    const { rowId, col } = parseCellId(id);
-    const row = c.rows.find((r) => r.id === rowId);
-    if (!row || !c.columns.includes(col)) return null;
-    const block = listApplyBlock(row, col);
-    const writable = !block || !block.includes("can't be written");
-    return {
-      label: labelOf(id),
-      value: cellOf(c, row, col),
-      live: row.cells[col] ?? "",
-      canApply: block === null,
-      applyNote: writable && block ? block : undefined,
-    };
-  };
-
-  const resetCell = (id: string) => {
-    const { rowId, col } = parseCellId(id);
-    const row = c.rows.find((r) => r.id === rowId);
-    if (row) setCell(rowId, col, row.cells[col] ?? "");
-  };
-
-  const applyCell = (id: string) => {
-    const { rowId, col } = parseCellId(id);
-    const items = listApplyItems(c, source, { rowId, col });
-    if (items.length > 0) setApplying(items);
+  const bindings: ListEditBindings = {
+    spec: (row, col) => listCellSpec(c, row, col, source, labelOf(col), cellOf(c, row, col), (v) => setOverride(row.id, col, v)),
+    pending: session.pending,
+    problems: session.problems,
+    saved: session.saved,
+    labelOf: (row, col) => `${labelOf(col)}, ${row.cells.name ?? ""}`,
+    onOpen: session.setOpenSpec,
   };
 
   const confirmText = confirm === "regenerate"
     ? {
         title: "Regenerate from live data?",
         description: editedCount > 0
-          ? `The records will be replaced with the current system data, and your ${editedCount} edited ${editedCount === 1 ? "cell" : "cells"} will be replaced too. Your title, header, footer, filters, columns and paper settings stay. You can undo this.`
-          : "The records will be replaced with the current system data. Your title, header, footer, filters, columns and paper settings stay. You can undo this.",
+          ? `The records will be replaced with the current system data, and your ${editedCount} report-only ${editedCount === 1 ? "edit" : "edits"} in the table will be replaced with the system values. Your title, header, footer, filters, columns, paper settings and unsaved changes to the system stay. You can undo this.`
+          : "The records will be replaced with the current system data. Your title, header, footer, filters, columns, paper settings and unsaved changes to the system stay. You can undo this.",
         label: "Regenerate",
       }
-    : {
-        title: "Reset this list?",
-        description: "Filters, columns, sorting, header and footer go back to the defaults. Edited cells stay. You can undo this.",
-        label: "Reset",
-      };
+    : { title: "", description: "", label: "" };
 
   function doConfirm() {
     const cf = confirm;
@@ -225,17 +190,13 @@ export function ListBuilder({ template, reportId }: { template: ListTemplate; re
     if (cf === "regenerate") {
       mutate((cur) => ({ ...cur, rows: buildListRows(cur.template, source!), overrides: {}, generatedAt: Date.now() }));
       notify.success("Regenerated from the live data.");
-    } else if (cf === "clear") {
-      mutate((cur) => ({ ...cur, ...defaultListView(cur.template) }));
     }
   }
-
-  const current = editMode && !touch ? cellInfo(currentCell) : null;
 
   return (
     <div className="min-w-0">
       <style>{EDIT_CSS}</style>
-      <ReportHeader title={title} onTitle={setTitle} typeLabel={info.title} semesterName={ctx.semesterName} />
+      <ReportHeader title={title} typeLabel={info.title} semesterName={ctx.semesterName} />
 
       <EditorToolbar
         canUndo={history.canUndo}
@@ -247,16 +208,15 @@ export function ListBuilder({ template, reportId }: { template: ListTemplate; re
         onFit={() => setZoom("fit")}
         onActual={() => setZoom(1)}
         status={status}
-        onSave={() => void saveNow()}
-        settings={c.settings}
-        onSettings={(settings) => mutate((cur) => ({ ...cur, settings }), "settings")}
-        allowOrientation
+        settingsOpen={settingsOpen}
+        onToggleSettings={() => setSettingsOpen((o) => !o)}
         editMode={editMode}
-        onEditMode={(on) => { setEditMode(on); setCurrentCell(null); setSheetCell(null); }}
-        applyCount={pending.length}
-        onApplyAll={() => setApplying(pending)}
+        onEditMode={session.requestEditMode}
+        pendingCount={session.count}
+        onSaveToDatabase={session.openSave}
+        onDiscardChanges={session.requestDiscard}
+        reportOnlyCount={session.reportOnlyCount}
         onReload={() => setConfirm("regenerate")}
-        onClear={() => setConfirm("clear")}
         onPreview={() => setShowPreview(true)}
       />
 
@@ -269,92 +229,108 @@ export function ListBuilder({ template, reportId }: { template: ListTemplate; re
         </Alert>
       )}
 
-      {editMode && (
-        <p className="mb-2 text-xs text-muted-foreground">
-          {touch ? "Tap a cell to edit it." : "Click a cell and type."} Edits change this report only and get a small dot. Reset a cell to go back to the system value, or use Apply to system where it's allowed.
-        </p>
+      {session.count > 0 && !editMode && (
+        <Alert className="mb-3">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            {session.count} {session.count === 1 ? "change" : "changes"} to real records from your last edit session {session.count === 1 ? "isn't" : "aren't"} saved to the database yet.
+            <span className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={session.requestDiscard}>Discard</Button>
+              <Button size="sm" onClick={session.openSave}>Save changes to database</Button>
+            </span>
+          </AlertDescription>
+        </Alert>
       )}
 
-      <div className="grid min-w-0 gap-3 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
-        <details open={!touch} className="rounded-xl border bg-card p-3 text-sm">
-          <summary className="cursor-pointer select-none py-1 font-medium pointer-coarse:py-2.5">
-            Filters and columns ({shown} {shown === 1 ? "record" : "records"})
-          </summary>
+      <p className="mb-2 text-xs text-muted-foreground">
+        {editMode
+          ? `${touch ? "Tap" : "Click"} any cell to change it. Changes to real records get a dot and are written with Save changes to database. Tinted cells change this report only; they're saved automatically and can be reset to the system value.`
+          : "This list is read-only. Turn on Edit mode to change the records in it."}
+      </p>
 
-          <div className="mt-3 flex flex-col gap-4">
-            <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
-              <dt className="text-muted-foreground">Semester</dt>
-              <dd className="min-w-0 break-words">{ctx.semesterName}</dd>
-              <dt className="text-muted-foreground">Course</dt>
-              <dd className="min-w-0 break-words">{ctx.programAbbreviation || ctx.programName || "None"}</dd>
-            </dl>
+      <ReportSettingsLayout
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        sidebar={
+          <>
+            <SettingsSection
+              title="Report"
+              onReset={() => mutate((cur) => ({ ...cur, subtitle: "", headerText: "", footerText: "" }))}
+            >
+              <TextField label="Title" value={title} onChange={setTitle} placeholder={info.title} />
+              <TextField label="Subtitle" value={c.subtitle} onChange={(v) => mutate((cur) => ({ ...cur, subtitle: v }), "subtitle")} />
+              <TextAreaField label="Header text" value={c.headerText} placeholder="Printed above the table"
+                onChange={(v) => mutate((cur) => ({ ...cur, headerText: v }), "header")} />
+              <TextAreaField label="Footer text" value={c.footerText} placeholder="Printed after the table, on the last page"
+                onChange={(v) => mutate((cur) => ({ ...cur, footerText: v }), "footer")} />
+            </SettingsSection>
 
-            <section className="flex flex-col gap-3" aria-label="Filters">
+            <SettingsSection title="Data and filters" count={shown} onReset={() => mutate((cur) => ({ ...cur, filters: {} }))}>
+              <FixedInfo items={[
+                { label: "Semester", value: ctx.semesterName },
+                { label: "Course", value: ctx.programAbbreviation || ctx.programName },
+              ]} />
               {templateFilters(template).map((f) => {
                 const { options, hasBlank } = filterOptions(c, f.key);
                 const value = c.filters[f.key] ?? "";
                 return (
-                  <label key={f.key} className={LABEL}>
-                    {f.label}
-                    <select className={SELECT} value={value} onChange={(e) => setFilter(f.key, e.target.value)}>
-                      <option value="">All</option>
-                      {(hasBlank || value === NONE) && <option value={NONE}>None</option>}
-                      {value && value !== NONE && !options.includes(value) && <option value={value}>{value}</option>}
-                      {options.map((o) => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </label>
+                  <SelectField
+                    key={f.key}
+                    label={f.label}
+                    value={value}
+                    onChange={(v) => setFilter(f.key, v)}
+                    options={[
+                      { value: "", label: "All" },
+                      ...(hasBlank || value === NONE ? [{ value: NONE, label: "None" }] : []),
+                      ...(value && value !== NONE && !options.includes(value) ? [{ value, label: value }] : []),
+                      ...options.map((o) => ({ value: o, label: o })),
+                    ]}
+                  />
                 );
               })}
-            </section>
+            </SettingsSection>
 
-            <fieldset className="min-w-0">
-              <legend className={LABEL}>Sort by</legend>
-              <div className="mt-1 flex gap-2">
-                <select
-                  aria-label="Sort column"
-                  className={cn(SELECT, "mt-0 w-auto min-w-0 flex-1")}
-                  value={c.sort.key}
-                  onChange={(e) => mutate((cur) => ({ ...cur, sort: { ...cur.sort, key: e.target.value } }))}
-                >
-                  {columns.map((col) => <option key={col.key} value={col.key}>{col.label}</option>)}
-                </select>
-                <select
-                  aria-label="Sort direction"
-                  className={cn(SELECT, "mt-0 w-24 shrink-0")}
-                  value={c.sort.dir}
-                  onChange={(e) => mutate((cur) => ({ ...cur, sort: { ...cur.sort, dir: e.target.value as "asc" | "desc" } }))}
-                >
-                  <option value="asc">A to Z</option>
-                  <option value="desc">Z to A</option>
-                </select>
-              </div>
-            </fieldset>
+            <SettingsSection title="Columns" count={c.columns.length} onReset={() => setColumns([...defaults.columns])}>
+              <ColumnsControl groups={[{
+                columns: columns.map((x) => ({ key: x.key, label: x.label })),
+                selected: c.columns,
+                personal: PERSONAL_COLUMNS,
+                onChange: setColumns,
+              }]} />
+            </SettingsSection>
 
-            <ColumnPicker columns={columns} selected={c.columns} onToggle={toggleColumn} />
+            <SettingsSection
+              title="Sorting and grouping"
+              onReset={() => mutate((cur) => ({ ...cur, sort: { ...defaults.sort }, groupBy: "template" }))}
+            >
+              <SelectField label="Sort by" value={c.sort.key}
+                options={columns.map((col) => ({ value: col.key, label: col.label }))}
+                onChange={(v) => mutate((cur) => ({ ...cur, sort: { ...cur.sort, key: v } }))} />
+              <SelectField label="Order" value={c.sort.dir}
+                options={[{ value: "asc", label: "A to Z" }, { value: "desc", label: "Z to A" }]}
+                onChange={(v) => mutate((cur) => ({ ...cur, sort: { ...cur.sort, dir: v as "asc" | "desc" } }))} />
+              <SelectField label="Group by" value={c.groupBy}
+                options={GROUP_BY_OPTIONS.map((o) => (o.value === "template"
+                  ? { value: o.value, label: `${o.label} (${templateGroupingLabel(template)})` }
+                  : o))}
+                onChange={(v) => mutate((cur) => ({ ...cur, groupBy: v as ListGroupBy }))} />
+            </SettingsSection>
 
-            <label className={LABEL}>
-              Header text
-              <Textarea
-                className="mt-1"
-                rows={2}
-                value={c.headerText}
-                placeholder="Printed above the table"
-                onChange={(e) => mutate((cur) => ({ ...cur, headerText: e.target.value }), "header")}
-              />
-            </label>
-            <label className={LABEL}>
-              Footer text
-              <Textarea
-                className="mt-1"
-                rows={2}
-                value={c.footerText}
-                placeholder="Printed after the table, on the last page"
-                onChange={(e) => mutate((cur) => ({ ...cur, footerText: e.target.value }), "footer")}
-              />
-            </label>
-          </div>
-        </details>
+            <SettingsSection title="Page" onReset={() => mutate((cur) => ({ ...cur, settings: { ...LIST_PAGE_DEFAULTS } }), "settings")}>
+              <PageControl settings={c.settings} onChange={(settings) => mutate((cur) => ({ ...cur, settings }), "settings")} />
+            </SettingsSection>
 
+            <SettingsSection title="Signatories" count={sign.items.length}>
+              <SignatoriesControl items={sign.items} onAdd={sign.add} onEdit={sign.edit} onDelete={sign.remove} onManage={sign.manage} />
+            </SettingsSection>
+
+            <SettingsSection title="Advanced" defaultOpen={false}
+              onReset={() => mutate((cur) => ({ ...cur, display: { ...DEFAULT_DISPLAY } }))}>
+              <AdvancedControl display={c.display} onChange={(display) => mutate((cur) => ({ ...cur, display }))}
+                show={{ rowNumbers: true, striped: true, dateFormat: true, blank: true }} />
+            </SettingsSection>
+          </>
+        }
+      >
         <div className="min-w-0">
           {c.rows.length === 0 && (
             <p className="mb-2 text-sm text-muted-foreground">
@@ -363,48 +339,30 @@ export function ListBuilder({ template, reportId }: { template: ListTemplate; re
           )}
           {listLayout(c).tight && (
             <p className="mb-2 text-sm text-muted-foreground">
-              These columns don't fit on this page without splitting words. Hide a column, or use landscape or a smaller font in Page settings.
+              These columns don't fit on this page without splitting words. Hide a column, or use landscape or a smaller font in Page.
             </p>
           )}
-          <EditorContext.Provider value={api}>
-            <PaperSurface paperWidth={paperWidth} zoom={zoom} onZoom={setZoom} onScale={setScale} gutter={8}>
-              <div className={editMode ? "rp-edit" : undefined}>
-                <ListSheet
-                  content={c}
-                  title={title}
-                  context={ctx}
-                  mode={editMode ? "edit" : "preview"}
-                  edit={editMode ? bindings : undefined}
-                />
-              </div>
-            </PaperSurface>
-          </EditorContext.Provider>
-          {current && currentCell && (
-            <CellActionsBar info={current} onReset={() => resetCell(currentCell)} onApply={() => applyCell(currentCell)} />
-          )}
+          <PaperSurface paperWidth={paperWidth} zoom={zoom} onZoom={setZoom} onScale={setScale} gutter={8}>
+            <div className={editMode ? "rp-edit" : undefined}>
+              <ListSheet
+                content={c}
+                title={title}
+                context={ctx}
+                mode={editMode ? "edit" : "preview"}
+                edit={editMode ? bindings : undefined}
+                manual={{
+                  ...manual,
+                  onAdd: sign.add,
+                  ...(editMode ? { onEdit: sign.edit, onDelete: sign.remove } : {}),
+                }}
+              />
+            </div>
+          </PaperSurface>
         </div>
-      </div>
+      </ReportSettingsLayout>
 
-      <CellSheet
-        cells={cellDefs}
-        openId={sheetCell}
-        onClose={() => setSheetCell(null)}
-        onCommit={(id, value) => {
-          const { rowId, col } = parseCellId(id);
-          setCell(rowId, col, value);
-        }}
-        onNavigate={(id) => { setSheetCell(id); setCurrentCell(id); }}
-        renderExtra={(cell) => {
-          const cellState = cellInfo(cell.id);
-          return cellState && (
-            <CellActions
-              info={cellState}
-              onReset={() => { resetCell(cell.id); setSheetCell(null); }}
-              onApply={() => { applyCell(cell.id); setSheetCell(null); }}
-            />
-          );
-        }}
-      />
+      {session.dialogs}
+      {sign.panel}
 
       <ReportPreviewDialog
         open={showPreview}
@@ -414,23 +372,9 @@ export function ListBuilder({ template, reportId }: { template: ListTemplate; re
         settings={c.settings}
         onSettings={(settings) => mutate((cur) => ({ ...cur, settings }), "settings")}
         allowOrientation
-        onExcel={() => downloadExcel(listExcel(c, title || info.title, ctx))}
-        renderSheet={(mode) => <ListSheet content={c} title={title} context={ctx} mode={mode} />}
+        onExcel={() => downloadExcel({ ...listExcel(c, title || info.title, ctx), signatories: manual.items })}
+        renderSheet={(mode) => <ListSheet content={c} title={title} context={ctx} mode={mode} manual={manual} />}
       />
-
-      {applying && (
-        <ApplyToSystemDialog
-          reportId={reportId}
-          items={applying}
-          source={source}
-          onClose={() => setApplying(null)}
-          onApplied={(fresh, items) => {
-            setApplying(null);
-            replaceSource(fresh);
-            mutate((cur) => listAfterApply(cur, items, fresh));
-          }}
-        />
-      )}
 
       <ConfirmDialog
         open={confirm !== null}

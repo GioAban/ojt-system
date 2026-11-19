@@ -1,7 +1,7 @@
 // Lapad ng mga column ng listahan: sapat para hindi maputol ang mga salita, ang sobra ay hinahati ayon sa weight.
 
 import { FONT_PX, MARGINS, paperSize } from "@/lib/paperExport";
-import { cellOf, templateColumns, visibleUnits } from "@/lib/listTemplates";
+import { cellOf, orderedColumns, visibleUnits } from "@/lib/listTemplates";
 import type { ListContent } from "@/types/reports";
 
 /** Padding at border ng isang cell */
@@ -46,13 +46,15 @@ export function listLayout(c: ListContent): ListLayout {
   const px = FONT_PX[c.settings.fontSize].px;
   const margin = MARGINS[c.settings.margins];
   const available = paperSize(c.settings.orientation, c.settings.paper).width - margin.left - margin.right;
-  const columns = templateColumns(c.template).filter((col) => c.columns.includes(col.key));
+  const columns = orderedColumns(c);
+  const numbered = c.display?.rowNumbers !== false;
   const units = visibleUnits(c);
   const regular = `${px}px Arial, Helvetica, sans-serif`;
   const bold = `bold ${px}px Arial, Helvetica, sans-serif`;
   const cap = available * MAX_WORD_SHARE;
 
-  const numberMin = Math.max(longestWord("NO.", bold, px), longestWord(String(units.length), regular, px)) + CELL_EXTRA;
+  // Walang column ng bilang kapag naka-off ang Row numbering
+  const numberMin = numbered ? Math.max(longestWord("NO.", bold, px), longestWord(String(units.length), regular, px)) + CELL_EXTRA : 0;
   const mins = columns.map((col) => {
     let word = longestWord(col.label, bold, px);
     for (const u of units) {

@@ -24,14 +24,20 @@ export interface StoredSignatories {
 const DB_NAME = "practicum-coordinator-reports";
 const DRAFTS = "reportDrafts";
 const SIGNATORIES = "signatories";
+/** Mga pirmahang tina-type ng coordinator sa bawat report (sa device lang; hindi ipinapadala sa server) */
+export const MANUAL_SIGNATORIES = "manualSignatories";
+/** Mga dating nagamit na pangalan sa pirmahan (para sa mungkahi habang nagta-type) */
+export const SIGNATORY_PEOPLE = "signatoryPeople";
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") return reject(new Error("IndexedDB unavailable"));
-    const req = indexedDB.open(DB_NAME, 1);
+    // Bersyon 2: dagdag ang manualSignatories at signatoryPeople (hindi ginagalaw ang dating laman)
+    const req = indexedDB.open(DB_NAME, 2);
     req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains(DRAFTS)) req.result.createObjectStore(DRAFTS, { keyPath: "key" });
-      if (!req.result.objectStoreNames.contains(SIGNATORIES)) req.result.createObjectStore(SIGNATORIES, { keyPath: "key" });
+      for (const store of [DRAFTS, SIGNATORIES, MANUAL_SIGNATORIES, SIGNATORY_PEOPLE]) {
+        if (!req.result.objectStoreNames.contains(store)) req.result.createObjectStore(store, { keyPath: "key" });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -74,12 +80,25 @@ export function saveReportDraft<C>(draft: StoredReportDraft<C>) {
   return put(DRAFTS, draft);
 }
 
-export async function deleteReportDraft(key: string) {
+export function deleteReportDraft(key: string) {
+  return deleteRecord(DRAFTS, key);
+}
+
+/** Pangkalahatang pagkuha, pag-save at pagbura sa isang store (para sa ibang bahagi ng Reports) */
+export function getRecord<T>(store: string, key: string) {
+  return get<T>(store, key);
+}
+
+export function putRecord(store: string, value: unknown) {
+  return put(store, value);
+}
+
+export async function deleteRecord(store: string, key: string) {
   try {
     const db = await open();
     await new Promise<void>((resolve) => {
-      const tx = db.transaction(DRAFTS, "readwrite");
-      tx.objectStore(DRAFTS).delete(key);
+      const tx = db.transaction(store, "readwrite");
+      tx.objectStore(store).delete(key);
       tx.oncomplete = () => resolve();
       tx.onerror = () => resolve();
       tx.onabort = () => resolve();

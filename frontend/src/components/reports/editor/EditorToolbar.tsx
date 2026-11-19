@@ -1,17 +1,13 @@
 import {
-  Check, CloudOff, Eraser, Eye, Loader2, Maximize2, Minus, MoreHorizontal, Plus, Redo2, RefreshCw,
-  Save, Settings2, Undo2, Upload, UserPlus,
+  Check, CloudOff, Database, Eraser, Eye, Loader2, Maximize2, Minus, MoreHorizontal, Plus, Redo2, RefreshCw,
+  SlidersHorizontal, Undo, Undo2, UserPlus,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { EditModeSwitch } from "@/components/reports/editor/EditModeSwitch";
-import { PageSettingsPanel } from "@/components/reports/editor/PageSettingsPanel";
 import { SYNC_TEXT, type SyncStatus } from "@/hooks/useReportDraft";
-import type { PageSettings } from "@/types/reports";
 
 interface EditorToolbarProps {
   canUndo: boolean;
@@ -22,24 +18,28 @@ interface EditorToolbarProps {
   onZoomStep: (dir: 1 | -1) => void;
   onFit: () => void;
   onActual: () => void;
+  /** Awtomatikong nase-save ang report; ito lang ang palatandaan (Saved, Saving..., Offline) */
   status: SyncStatus;
-  onSave: () => void;
-  settings: PageSettings;
-  onSettings: (next: PageSettings) => void;
-  allowOrientation?: boolean;
+  /** Ang sidebar ng mga setting (sa telepono: bottom sheet) */
+  settingsOpen: boolean;
+  onToggleSettings: () => void;
   /** "Add new students (N)"; 0 o wala = hindi ipinapakita */
   missingCount?: number;
   onAddMissing?: () => void;
   onReload: () => void;
-  onClear: () => void;
+  /** "Clear" ng buong report (Annual at HTE); wala sa mga listahan (may Reset bawat section) */
+  onClear?: () => void;
   onPreview: () => void;
   editMode: boolean;
   onEditMode: (on: boolean) => void;
-  /** Mga pagbabagong pwedeng isulat sa system; 0 o wala = hindi ipinapakita */
-  applyCount?: number;
-  onApplyAll?: () => void;
-  /** Hal. ang pagpili ng column */
-  extra?: ReactNode;
+  /** Mga pagbabago sa tunay na record na hindi pa naisusulat sa database */
+  pendingCount?: number;
+  /** "Save changes to database": bubuksan ang buod (Confirm / Cancel) */
+  onSaveToDatabase?: () => void;
+  /** "Discard changes": itatapon ang mga hindi pa naisusulat (may kumpirmasyon) */
+  onDiscardChanges?: () => void;
+  /** Mga edit sa report lang ngayong Edit mode (hiwalay na maliit na label; hindi kasama sa bilang ng database) */
+  reportOnlyCount?: number;
 }
 
 /** Manipis na toolbar sa itaas ng papel (nakadikit sa ilalim ng top bar) */
@@ -54,6 +54,20 @@ export function EditorToolbar(p: EditorToolbarProps) {
       className="sticky top-14 z-20 -mx-4 mb-3 border-b bg-background/95 px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-xl sm:border"
     >
       <div className="flex flex-wrap items-center gap-1">
+        <Button
+          type="button"
+          variant={p.settingsOpen ? "secondary" : "ghost"}
+          size="sm"
+          aria-pressed={p.settingsOpen}
+          title={p.settingsOpen ? "Hide report settings" : "Show report settings"}
+          onClick={p.onToggleSettings}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          Settings
+        </Button>
+
+        <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Undo (Ctrl+Z)" title="Undo (Ctrl+Z)" disabled={!p.canUndo} onClick={p.onUndo}>
           <Undo2 className="h-4 w-4" />
         </Button>
@@ -93,11 +107,38 @@ export function EditorToolbar(p: EditorToolbarProps) {
 
         <EditModeSwitch on={p.editMode} onChange={p.onEditMode} />
 
-        {(p.applyCount ?? 0) > 0 && (
-          <Button type="button" variant="outline" size="sm" onClick={p.onApplyAll} title="Write the allowed edits to the real records, after you confirm">
-            <Upload className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Apply to system</span> ({p.applyCount})
-          </Button>
+        {p.editMode && p.onSaveToDatabase && (
+          <>
+            {(p.reportOnlyCount ?? 0) > 0 && (
+              <span
+                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-300"
+                title="Edits that change this report only. They're saved automatically with the report and don't change the database."
+              >
+                {p.reportOnlyCount} report-only {p.reportOnlyCount === 1 ? "edit" : "edits"}
+              </span>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              onClick={p.onSaveToDatabase}
+              title="Review and write your changes to the real records"
+            >
+              <Database className="h-3.5 w-3.5" />
+              Save <span className="hidden sm:inline">changes </span>to database
+              {(p.pendingCount ?? 0) > 0 && ` (${p.pendingCount})`}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={p.onDiscardChanges}
+              title="Remove the changes to real records that aren't saved yet"
+            >
+              <Undo className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Discard changes</span>
+              <span className="sm:hidden">Discard</span>
+            </Button>
+          </>
         )}
 
         {missingCount > 0 && (
@@ -106,19 +147,6 @@ export function EditorToolbar(p: EditorToolbarProps) {
             <span className="hidden sm:inline">Add new students</span> ({missingCount})
           </Button>
         )}
-
-        {p.extra}
-
-        <Popover>
-          <PopoverTrigger render={<Button type="button" variant="ghost" size="sm" aria-label="Page settings" />}>
-            <Settings2 className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">Page settings</span>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-80">
-            <PopoverTitle>Page settings</PopoverTitle>
-            <PageSettingsPanel settings={p.settings} onChange={p.onSettings} allowOrientation={p.allowOrientation} compact />
-          </PopoverContent>
-        </Popover>
 
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label="More actions" title="More actions" />}>
@@ -131,17 +159,16 @@ export function EditorToolbar(p: EditorToolbarProps) {
             <DropdownMenuItem className="gap-2 sm:hidden" onClick={p.onFit}>
               <Maximize2 className="h-4 w-4" /> Fit the page width
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={p.onClear}>
-              <Eraser className="h-4 w-4" /> Clear
-            </DropdownMenuItem>
+            {p.onClear && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={p.onClear}>
+                  <Eraser className="h-4 w-4" /> Clear
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
-
-        <Button type="button" variant="outline" size="sm" onClick={p.onSave}>
-          <Save className="h-3.5 w-3.5" />
-          Save
-        </Button>
 
         <Button type="button" size="sm" onClick={p.onPreview}>
           <Eye className="h-3.5 w-3.5" />

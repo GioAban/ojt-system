@@ -107,7 +107,8 @@ public class CoordinatorApplicationsController {
         if (problem != null) return problem;
 
         Department d = departmentRepository.findById(a.getDepartmentId()).orElse(null);
-        if (d == null || Boolean.TRUE.equals(d.getIsArchived()) || !"approved".equalsIgnoreCase(d.getStatus())) {
+        if (d == null || Boolean.TRUE.equals(d.getIsArchived()) || !"approved".equalsIgnoreCase(d.getStatus())
+                || d.getCompany().isHiddenRequest()) {
             return ResponseEntity.status(409).body("That department is no longer available. Decline this application.");
         }
         String st = s.getStatus() == null ? "" : s.getStatus().trim();

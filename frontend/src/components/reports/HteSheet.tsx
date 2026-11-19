@@ -1,10 +1,15 @@
 import type { CSSProperties, KeyboardEvent } from "react";
 import { Letterhead } from "@/components/reports/Letterhead";
+import type { ManualSignatoriesProps } from "@/components/reports/ManualSignatoriesBlock";
+import { signatoryArea } from "@/components/reports/signatoryArea";
 import { ReportPages, type SheetMode } from "@/components/reports/ReportPages";
 import { SignatoriesSheet, type TextRenderer } from "@/components/reports/SignatoriesSheet";
 import { SheetText, type TextControl } from "@/components/reports/editor/EditableText";
+import { TypedCell } from "@/components/reports/editor/TypedCell";
 import { hteColumnsOf, resolveTitle } from "@/lib/hteCells";
-import type { HteContent, HteVariant, ReportContext, SignatorySet } from "@/types/reports";
+import { STRIPE, displayOf, shownCell } from "@/lib/reportDisplay";
+import type { CellSpec } from "@/lib/reportFields";
+import type { HteContent, HteVariant, PendingMap, ReportContext, SignatorySet } from "@/types/reports";
 
 const CELL: CSSProperties = { border: "1px solid #000", padding: "4px 6px", verticalAlign: "top", overflowWrap: "anywhere" };
 const HEAD: CSSProperties = { ...CELL, background: "#e7e6e6", textAlign: "center", verticalAlign: "middle", fontWeight: 700 };
@@ -47,6 +52,13 @@ export interface HteEditBindings {
   /** Row na napili (naka-highlight sa screen lang) */
   selectedRow: string | null;
   pin: { key: string; page: number } | null;
+  /** Cell na may sariling input (record o report lang); null = tekstong diretsong nae-edit sa papel */
+  typed: (id: string) => CellSpec | null;
+  pending: PendingMap;
+  problems: Record<string, string>;
+  /** key ng pagbabago na kaka-save lang sa database (pansamantalang marka) */
+  saved: Record<string, true>;
+  onOpen: (spec: CellSpec) => void;
 }
 
 interface HteSheetProps {
@@ -56,6 +68,8 @@ interface HteSheetProps {
   signatories: SignatorySet;
   mode: SheetMode;
   edit?: HteEditBindings;
+  /** Mga pirmahang tina-type ng coordinator (sa device lang); pumapalit sa built-in kapag mayroon */
+  manual?: ManualSignatoriesProps;
 }
 
 const plainText: TextRenderer = (_id, value, style) => (
@@ -66,7 +80,7 @@ const plainText: TextRenderer = (_id, value, style) => (
  * Ang mismong papel ng Report on the List of HTEs (Annex D) at ng List of HTEs.
  * Iisang component para sa editor, preview, print at PDF. Sa "list" ay walang laman ang Period of Training.
  */
-export function HteSheet({ content, context, variant, signatories, mode, edit }: HteSheetProps) {
+export function HteSheet({ content, context, variant, signatories, mode, edit, manual }: HteSheetProps) {
   const editing = mode === "edit" && edit !== undefined;
   const cols = hteColumnsOf(content);
   const showCompany = cols.includes("company");
@@ -77,20 +91,42 @@ export function HteSheet({ content, context, variant, signatories, mode, edit }:
   const firstUnit = new Map<number, number>();
   units.forEach((u, i) => { if (!firstUnit.has(u.group)) firstUnit.set(u.group, i); });
   const t = resolveTitle(content, variant, context);
+  const display = displayOf(content.display);
+  // Format ng petsa at blangkong cell: sa papel na hindi ine-edit (preview, print, PDF)
+  const fmt = (value: string) => (editing ? value : shownCell(value, display));
+  const NOTE: CSSProperties = { whiteSpace: "pre-wrap", overflowWrap: "anywhere" };
 
-  const live: TextRenderer = (id, value, style, placeholder) => (
-    <SheetText
-      key={id}
-      id={id}
-      value={value}
-      editable
-      edited={edit!.isEdited(id)}
-      label={edit!.labelOf(id)}
-      placeholder={placeholder}
-      style={style}
-      onCommit={(v) => edit!.onText(id, v)}
-    />
-  );
+  const live: TextRenderer = (id, value, style, placeholder) => {
+    const spec = edit!.typed(id);
+    if (spec) {
+      return (
+        <TypedCell
+          key={id}
+          spec={spec}
+          pending={edit!.pending}
+          value={value}
+          label={edit!.labelOf(id)}
+          problems={edit!.problems}
+          saved={edit!.saved}
+          style={style}
+          onOpen={edit!.onOpen}
+        />
+      );
+    }
+    return (
+      <SheetText
+        key={id}
+        id={id}
+        value={value}
+        editable
+        edited={edit!.isEdited(id)}
+        label={edit!.labelOf(id)}
+        placeholder={placeholder}
+        style={style}
+        onCommit={(v) => edit!.onText(id, v)}
+      />
+    );
+  };
   const text: TextRenderer = editing ? live : plainText;
 
   const titleBlock = (tx: TextRenderer) => (
@@ -101,6 +137,7 @@ export function HteSheet({ content, context, variant, signatories, mode, edit }:
           <div key={i}>{tx(`h:title:${i}`, line, { fontWeight: 700 }, "Title")}</div>
         ))}
         {tx("h:sem", t.semester, variant === "report" ? { fontWeight: 700 } : undefined, "School year")}
+        {content.subtitle?.trim() && <div style={NOTE}>{content.subtitle}</div>}
       </div>
       <div style={{ fontWeight: 700, marginTop: 12 }}>
         {([["HEI", "h:hei", content.hei], ["ADDRESS", "h:address", content.address], ["DEGREE PROGRAM", "h:degree", content.degreeProgram]] as const).map(
@@ -112,6 +149,7 @@ export function HteSheet({ content, context, variant, signatories, mode, edit }:
           ),
         )}
       </div>
+      {content.headerText?.trim() && <div style={{ marginTop: 10, ...NOTE }}>{content.headerText}</div>}
     </div>
   );
 
@@ -145,7 +183,18 @@ export function HteSheet({ content, context, variant, signatories, mode, edit }:
           <ul style={{ margin: "2px 0 0", paddingLeft: 18, listStyle: "disc" }}>
             {g.departments.map((d, i) => (
               <li key={i}>
-                {live ? (
+                {live && edit!.typed(`g:${g.id}:dept:${i}`) ? (
+                  // Linya na tugma sa tunay na department: pangalan ng department ang binabago
+                  <TypedCell
+                    spec={edit!.typed(`g:${g.id}:dept:${i}`) as CellSpec}
+                    pending={edit!.pending}
+                    value={d}
+                    label={edit!.labelOf(`g:${g.id}:dept:${i}`)}
+                    problems={edit!.problems}
+                    saved={edit!.saved}
+                    onOpen={edit!.onOpen}
+                  />
+                ) : live ? (
                   <SheetText
                     id={`g:${g.id}:dept:${i}`}
                     value={d}
@@ -179,30 +228,34 @@ export function HteSheet({ content, context, variant, signatories, mode, edit }:
               return (
                 <td key={k} style={CELL}>
                   <div style={{ display: "flex" }}>
-                    <span style={{ whiteSpace: "pre" }}>{u.number}. </span>
+                    {display.rowNumbers && <span style={{ whiteSpace: "pre" }}>{u.number}. </span>}
                     <div style={{ flex: 1, minWidth: 0 }}>{tx(`s:${s.id}:name`, s.name, undefined, "LASTNAME,FIRSTNAME M.")}</div>
                   </div>
                 </td>
               );
             case "program":
-              return <td key={k} style={{ ...CELL, textAlign: "center" }}>{tx(`s:${s.id}:program`, s.program, undefined, "Program")}</td>;
+              return <td key={k} style={{ ...CELL, textAlign: "center" }}>{tx(`s:${s.id}:program`, fmt(s.program), undefined, "Program")}</td>;
             case "gender":
-              return <td key={k} style={{ ...CELL, textAlign: "center" }}>{tx(`s:${s.id}:gender`, s.gender, undefined, "Gender")}</td>;
+              return <td key={k} style={{ ...CELL, textAlign: "center" }}>{tx(`s:${s.id}:gender`, fmt(s.gender), undefined, "Gender")}</td>;
             case "period":
               return (
                 <td key={k} style={CELL}>
-                  {variant === "report" ? tx(`s:${s.id}:period`, s.period, undefined, "Period") : plainText("", "")}
+                  {variant === "report" ? tx(`s:${s.id}:period`, fmt(s.period), undefined, "Period") : plainText("", "")}
                 </td>
               );
             default:
-              return <td key={k} style={CELL}>{tx(`s:${s.id}:department`, s.department, undefined, " ")}</td>;
+              return <td key={k} style={CELL}>{tx(`s:${s.id}:department`, fmt(s.department), undefined, " ")}</td>;
           }
         })}
       </>
     );
   };
 
-  const measureKey = JSON.stringify([content, variant, signatories, context.semesterId, t]);
+  const footer = content.footerText?.trim()
+    ? <div style={{ paddingTop: 16, breakInside: "avoid", ...NOTE }}>{content.footerText}</div>
+    : null;
+
+  const measureKey = JSON.stringify([content, variant, signatories, context.semesterId, t, manual ? [manual.items, manual.showBuiltIn, Boolean(manual.onAdd)] : null]);
 
   return (
     <ReportPages
@@ -257,6 +310,7 @@ export function HteSheet({ content, context, variant, signatories, mode, edit }:
               data-student-id={s?.id}
               style={{
                 breakInside: "avoid",
+                ...(display.striped && u.number > 0 && u.number % 2 === 0 ? { background: STRIPE } : null),
                 ...(editing && edit.selectedRow === u.key ? { background: "rgba(37,99,235,.07)" } : null),
               }}
             >
@@ -271,8 +325,8 @@ export function HteSheet({ content, context, variant, signatories, mode, edit }:
         }
         return rows;
       }}
-      signatories={<SignatoriesSheet people={signatories} text={text} />}
-      measureSignatories={<SignatoriesSheet people={signatories} />}
+      signatories={<>{footer}{signatoryArea(<SignatoriesSheet people={signatories} text={text} />, manual)}</>}
+      measureSignatories={<>{footer}{signatoryArea(<SignatoriesSheet people={signatories} />, manual)}</>}
     />
   );
 }

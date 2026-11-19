@@ -26,14 +26,25 @@ public final class ReportDtos {
             SignatoryDefaults defaults,
             String savedSignatories) {}
 
+    /** startTrainingDate: ang nakaimbak lang (blangko kung wala); ang startDate ay may deployed date bilang kapalit */
     public record StudentRow(Long id, String lastname, String firstname, String middleInitial, String program,
                              String year, String gender, String status, String startDate, String endDate,
-                             Long departmentId, Long companyId) {}
+                             Long departmentId, Long companyId, String startTrainingDate,
+                             String contact, String email, String birthday, String address, String parent,
+                             String guardian, boolean hasAccount) {}
 
-    public record CompanyRow(Long id, String name, String address) {}
+    /** addressValue: ang tunay na address (ang address ay may location bilang kapalit). assignable: aktibo ngayong semester */
+    public record CompanyRow(Long id, String name, String address, String addressValue, boolean assignable,
+                             String imsupName, String imsupPosition) {}
 
+    /**
+     * supervisor at supervisorPosition: ang gagamitin (department, kung wala ay sa company).
+     * ownSupervisor at ownSupervisorPosition: ang nakaimbak sa department mismo (para sa pag-edit).
+     * assignable: approved, aktibo, at aktibo ang company.
+     */
     public record DepartmentRow(Long id, Long companyId, String name, String supervisor, String supervisorPosition,
-                                int slots, int students) {}
+                                int slots, int students, String ownSupervisor, String ownSupervisorPosition,
+                                boolean assignable, String supervisorSource) {}
 
     public record Data(List<StudentRow> students, List<CompanyRow> companies, List<DepartmentRow> departments) {}
 
@@ -50,7 +61,7 @@ public final class ReportDtos {
     // ---- Datos para sa mga simpleng listahan ----
 
     /** type: initial, pre o post */
-    public record ListRequirement(Long id, String title, String type) {}
+    public record ListRequirement(Long id, String title, String type, boolean builtIn) {}
 
     /**
      * Mga status: ASSIGNED, FOR_CHECKING, CHECKED o INVALID (pareho sa tracking).
@@ -63,7 +74,8 @@ public final class ReportDtos {
                               String finalStatus, boolean finalOpen, boolean finalStarted, BigDecimal finalScore,
                               Map<Long, String> requirementStatuses) {}
 
-    public record ListData(List<ListRequirement> requirements, List<ListStudent> students) {}
+    /** sections: mga section / subject code na ginagamit na ng mga student (para sa dropdown) */
+    public record ListData(List<ListRequirement> requirements, List<ListStudent> students, List<String> sections) {}
 
     /** Lahat ng datos ng system na kailangan para makabuo ng report */
     public record Source(Context context, Data data, ListData lists) {}
@@ -86,15 +98,23 @@ public final class ReportDtos {
     // ---- Apply to system ----
 
     /**
-     * target: student o department. field: assignment (value = department id), section, year,
-     * supervisorName o supervisorPosition. expectedOld: ang nakita ng coordinator; hihinto kapag naiba na ito.
+     * key: ang cell sa report (ibinabalik sa bawat row para makita ang error sa tamang cell).
+     * target at field:
+     *   student: assignment (value = department id), section, year, startDate (YYYY-MM-DD o blangko), completedDate,
+     *            status (FOR_APPROVAL o APPROVED), requirement (refId = requirement id; value = CHECKED o INVALID),
+     *            midterm o final (value = open o closed)
+     *   department: supervisorName, supervisorPosition
+     *   company: name, address
+     * expectedOld: ang nakaimbak na halaga na nakita ng coordinator; hihinto kapag naiba na ito.
      */
-    public record ApplyChange(String target, Long id, String field, String value, String expectedOld) {}
+    public record ApplyChange(String key, String target, Long id, String field, String value, String expectedOld,
+                              Long refId) {}
 
     public record ApplyRequest(List<ApplyChange> changes) {}
 
     /** problem = null kung ayos; ang lumang halaga ay laging galing sa database */
-    public record ApplyPreviewRow(String who, String field, String oldValue, String newValue, int affected, String problem) {}
+    public record ApplyPreviewRow(String key, String who, String field, String oldValue, String newValue, int affected,
+                                  String problem) {}
 
     public record ApplyPreview(List<ApplyPreviewRow> rows, boolean ok) {}
 

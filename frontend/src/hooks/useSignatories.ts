@@ -103,7 +103,21 @@ export function useSignatories(context: ReportContext | null) {
 
   const reset = useCallback(() => store(null), [store]);
 
+  /** Pagkatapos maisulat ang pirmahan mula sa report: kunin ang nasa account (walang ipinapadala) */
+  const refresh = useCallback(async () => {
+    try {
+      const res = await api.get<{ content: string | null }>("/coordinator/reports/signatories");
+      const next = parseOverrides(res.data.content);
+      savedRef.current = next;
+      dirtyRef.current = false;
+      setSaved(next);
+      await saveSignatories({ key: owner, saved: next, dirty: false });
+    } catch {
+      // mananatili ang huling alam; makukuha sa susunod na pagbukas
+    }
+  }, [owner]);
+
   const values = context ? resolveSignatories(context.defaults, saved) : null;
   const getSaved = useCallback(() => savedRef.current, []);
-  return { values, saved, getSaved, loaded, set, reset, replace: store, customized: saved !== null };
+  return { values, saved, getSaved, loaded, set, reset, replace: store, refresh, customized: saved !== null };
 }

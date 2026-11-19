@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function BackLink() {
@@ -16,24 +15,16 @@ function BackLink() {
   );
 }
 
-/** Itaas ng editor: pabalik, pamagat na nae-edit, uri at semester */
-export function ReportHeader({ title, onTitle, typeLabel, semesterName }: {
+/** Itaas ng editor: pabalik, pamagat, uri at semester (ang pamagat ay binabago sa sidebar, section na Report) */
+export function ReportHeader({ title, typeLabel, semesterName }: {
   title: string;
-  onTitle: (value: string) => void;
   typeLabel: string;
   semesterName: string;
 }) {
   return (
     <div className="mb-3">
       <BackLink />
-      <Input
-        value={title}
-        maxLength={200}
-        aria-label="Report title"
-        placeholder="Report title"
-        className="h-11 text-base font-semibold sm:text-lg"
-        onChange={(e) => onTitle(e.target.value)}
-      />
+      <h1 className="break-words text-lg font-semibold tracking-tight sm:text-xl">{title || typeLabel}</h1>
       <p className="mt-1 text-sm text-muted-foreground">{typeLabel} · {semesterName}</p>
     </div>
   );

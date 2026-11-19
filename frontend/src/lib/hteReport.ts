@@ -1,8 +1,9 @@
 // Pagbuo ng laman ng "Report on the List of HTEs and Student Interns" at "List of HTEs" mula sa datos ng system.
 
+import { displayOf } from "@/lib/reportDisplay";
 import {
-  DEFAULT_PAGE_SETTINGS,
-  type HteContent, type HteGroup, type HteStudent, type PageSettings, type ReportSource, type ReportStudent,
+  DEFAULT_DISPLAY, DEFAULT_PAGE_SETTINGS, type HteStudentSort,
+  type HteContent, type HteGroup, type HteStudent, type PageSettings, type PendingChange, type ReportSource, type ReportStudent,
 } from "@/types/reports";
 
 export const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -46,10 +47,16 @@ export function formatGender(raw: string): string {
   return g;
 }
 
-/** Pangalan ng department para sa report; "N/A" ay walang department talaga */
-export function departmentLabel(name: string | undefined): string {
+/** Placeholder na department ng company na walang department (blangko o "N/A") */
+export const isPlaceholderDepartment = (name: string | null | undefined) => {
   const v = (name ?? "").trim();
-  return v.toUpperCase() === "N/A" ? "" : v;
+  return !v || v.toUpperCase() === "N/A";
+};
+
+/** Pangalan ng department para sa report: "N/A" kapag walang department ang company; blangko kung hindi alam */
+export function departmentLabel(name: string | undefined): string {
+  if (name === undefined) return "";
+  return isPlaceholderDepartment(name) ? "N/A" : name.trim();
 }
 
 function toStudent(s: ReportStudent, deptName: Map<number, string>): HteStudent {
@@ -108,16 +115,29 @@ export function buildHteContent(source: ReportSource): HteContent {
     address: c.address,
     degreeProgram: c.programName,
     groups: buildGroups(source),
-    settings: { ...DEFAULT_PAGE_SETTINGS, orientation: "landscape" },
+    settings: { ...HTE_PAGE_DEFAULTS },
+    pending: {},
+    subtitle: "",
+    headerText: "",
+    footerText: "",
+    filters: {},
+    studentSort: "manual",
+    display: { ...DEFAULT_DISPLAY },
   };
 }
+
+/** Default ng papel ng HTE report: landscape gaya ng Annex D (pwede nang palitan) */
+export const HTE_PAGE_DEFAULTS: PageSettings = { ...DEFAULT_PAGE_SETTINGS, orientation: "landscape" };
+
+const SORTS: HteStudentSort[] = ["manual", "asc", "desc"];
 
 /** Sinusuri ang na-load na draft; pinupunan ang kulang na bahagi */
 export function parseHteContent(raw: unknown): HteContent | null {
   if (!raw || typeof raw !== "object") return null;
   const c = raw as Partial<HteContent>;
   if (!Array.isArray(c.groups)) return null;
-  const settings: PageSettings = { ...DEFAULT_PAGE_SETTINGS, ...(c.settings ?? {}), orientation: "landscape" };
+  // Dati ay laging landscape; ngayon ay pwedeng palitan (landscape pa rin ang default ng mga luma)
+  const settings: PageSettings = { ...HTE_PAGE_DEFAULTS, ...(c.settings ?? {}) };
   return {
     hei: c.hei ?? "",
     address: c.address ?? "",
@@ -127,6 +147,13 @@ export function parseHteContent(raw: unknown): HteContent | null {
     ...(Array.isArray(c.titleLines) ? { titleLines: c.titleLines.map((l) => String(l ?? "")) } : {}),
     ...(typeof c.semesterLine === "string" ? { semesterLine: c.semesterLine } : {}),
     ...(Array.isArray(c.columns) ? { columns: c.columns.map(String) } : {}),
+    pending: c.pending && typeof c.pending === "object" ? c.pending : {},
+    subtitle: typeof c.subtitle === "string" ? c.subtitle : "",
+    headerText: typeof c.headerText === "string" ? c.headerText : "",
+    footerText: typeof c.footerText === "string" ? c.footerText : "",
+    filters: c.filters && typeof c.filters === "object" ? c.filters : {},
+    studentSort: SORTS.includes(c.studentSort as HteStudentSort) ? (c.studentSort as HteStudentSort) : "manual",
+    display: displayOf(c.display),
     groups: c.groups.map((g) => ({
       id: g.id || newId(),
       companyId: g.companyId ?? null,
@@ -218,5 +245,110 @@ export function moveStudentsToLive(content: HteContent, studentIds: number[], so
     to.students.push(moved);
   }
   groups = groups.filter((g) => g.students.length > 0 || g.companyId === null);
+  return { ...content, groups };
+}
+
+/**
+ * Pagkatapos maisulat ang mga pagbabago mula sa Edit mode: inililipat ang mga student na nagpalit ng company,
+ * at kinukuha ulit sa system ang department, panahon ng training at pangalan ng company na binago.
+ */
+export function hteAfterCommit(content: HteContent, source: ReportSource, changes: PendingChange[]): HteContent {
+  const moved = changes.filter((x) => x.target === "student" && x.field === "assignment").map((x) => x.id);
+  const next = moveStudentsToLive(content, moved, source);
+  const students = new Set(changes.filter((x) => x.target === "student").map((x) => x.id));
+  const companies = new Set(changes.filter((x) => x.target === "company" && x.field === "name").map((x) => x.id));
+  // Pinalitang pangalan ng department: lumang pangalan (maliliit na titik) -> bago
+  const renamed = new Map<string, string>();
+  for (const x of changes) {
+    if (x.target !== "department" || x.field !== "name" || !x.expectedOld) continue;
+    const fresh = source.data.departments.find((d) => d.id === x.id);
+    if (fresh) renamed.set(x.expectedOld.trim().toLowerCase(), departmentLabel(fresh.name));
+  }
+  const rename = (text: string) => renamed.get(text.trim().toLowerCase()) ?? text;
+  const live = new Map(source.data.students.map((s) => [s.id, s]));
+  const deptName = new Map(source.data.departments.map((d) => [d.id, d.name]));
+  const companyName = new Map(source.data.companies.map((c) => [c.id, c.name]));
+  return {
+    ...next,
+    groups: next.groups.map((g) => ({
+      ...g,
+      name: g.companyId !== null && companies.has(g.companyId) ? (companyName.get(g.companyId) ?? g.name) : g.name,
+      departments: g.departments.map(rename),
+      students: g.students.map((st) => {
+        const row = st.studentId === null || !students.has(st.studentId) ? undefined : live.get(st.studentId);
+        if (!row) return { ...st, department: rename(st.department) };
+        return {
+          ...st,
+          name: formatStudentName(row),
+          gender: formatGender(row.gender),
+          department: row.departmentId === null ? "" : departmentLabel(deptName.get(row.departmentId)),
+          period: formatPeriod(row.startDate, row.endDate),
+        };
+      }),
+    })),
+  };
+}
+
+// ---- Mga filter at ayos mula sa sidebar (sa pagpapakita lang) -----------------------
+
+export const HTE_FILTERS = [
+  { key: "section", label: "Section" },
+  { key: "company", label: "Company" },
+  { key: "department", label: "Department" },
+  { key: "status", label: "Status" },
+] as const;
+
+/** Mga pagpipilian ng bawat filter, mula sa datos ng system */
+export function hteFilterOptions(source: ReportSource): Record<string, { value: string; label: string }[]> {
+  const extra = new Map(source.lists.students.map((s) => [s.id, s]));
+  const sections = [...new Set(source.data.students.map((s) => extra.get(s.id)?.subjectCode ?? "").filter(Boolean))].sort();
+  const statuses = [...new Set(source.data.students.map((s) => s.status || "For Approval"))].sort();
+  const usedCompanies = new Set(source.data.students.map((s) => s.companyId).filter((x): x is number => x !== null));
+  const usedDepartments = new Set(source.data.students.map((s) => s.departmentId).filter((x): x is number => x !== null));
+  const companyName = new Map(source.data.companies.map((c) => [c.id, c.name]));
+  return {
+    section: sections.map((v) => ({ value: v, label: v })),
+    company: source.data.companies.filter((c) => usedCompanies.has(c.id))
+      .map((c) => ({ value: String(c.id), label: c.name || "Unnamed company" }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    department: source.data.departments.filter((d) => usedDepartments.has(d.id) && !isPlaceholderDepartment(d.name))
+      .map((d) => ({ value: String(d.id), label: `${companyName.get(d.companyId) ?? ""} – ${departmentLabel(d.name)}` }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    status: statuses.map((v) => ({ value: v, label: v })),
+  };
+}
+
+/**
+ * Ang ipapakita: may filter (para sa mga student mula sa system lang; laging kasama ang mga idinagdag sa report)
+ * at ayos ng mga student sa loob ng bawat company. Hindi nito binabago ang laman ng report.
+ */
+export function visibleHte(content: HteContent, source: ReportSource): HteContent {
+  const filters = Object.entries(content.filters ?? {}).filter(([, v]) => v);
+  const sort = content.studentSort ?? "manual";
+  if (filters.length === 0 && sort === "manual") return content;
+
+  const live = new Map(source.data.students.map((s) => [s.id, s]));
+  const extra = new Map(source.lists.students.map((s) => [s.id, s]));
+  const keep = (studentId: number | null) => {
+    if (studentId === null) return true;
+    const s = live.get(studentId);
+    if (!s) return filters.length === 0;
+    return filters.every(([k, v]) => {
+      if (k === "section") return (extra.get(s.id)?.subjectCode ?? "") === v;
+      if (k === "company") return String(s.companyId ?? "") === v;
+      if (k === "department") return String(s.departmentId ?? "") === v;
+      if (k === "status") return (s.status || "For Approval") === v;
+      return true;
+    });
+  };
+  const dir = sort === "desc" ? -1 : 1;
+  const groups: HteGroup[] = [];
+  for (const g of content.groups) {
+    let students = g.students.filter((s) => keep(s.studentId));
+    // Grupong naubos dahil sa filter: hindi na ipinapakita (ang grupong walang student talaga ay naiiwan)
+    if (g.students.length > 0 && students.length === 0) continue;
+    if (sort !== "manual") students = [...students].sort((a, b) => dir * a.name.localeCompare(b.name));
+    groups.push({ ...g, students });
+  }
   return { ...content, groups };
 }

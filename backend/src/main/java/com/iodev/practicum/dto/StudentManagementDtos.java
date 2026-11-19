@@ -65,68 +65,28 @@ public class StudentManagementDtos {
             Map<String, Long> requirements) {}
 
     // ---------------------------------------------------------------------
-    // Bulk import
+    // Registration link
     // ---------------------------------------------------------------------
 
-    public record ImportRow(
-            int line,
-            String studentNumber,
-            String lastname,
-            String firstname,
-            String middleInitial,
-            String gender,
-            String year,
-            String course,
-            List<String> errors) {}
-
-    public record ImportPreview(int total, int valid, int invalid, List<ImportRow> rows) {}
-
-    public record ImportCommitRequest(Long semesterId, List<ImportRow> rows) {}
-
-    public record ImportRowError(int line, String message) {}
-
-    public record ImportCommitResult(int created, int skipped, List<ImportRowError> errors) {}
-
-    // ---------------------------------------------------------------------
-    // Enrollment link
-    // ---------------------------------------------------------------------
-
-    /** dueDate = yyyy-MM-dd (huling araw na bukas ang link) */
+    /** dueDate = yyyy-MM-dd (huling araw na bukas ang link). Bilang ng registration bawat status. */
     public record EnrollmentLinkState(
             boolean exists,
             String token,
             boolean open,
             String dueDate,
             boolean active,
-            long registered,
+            long pending,
+            long verified,
+            long rejected,
             long total,
-            long pending) {}
+            /* "Also require my approval" */
+            boolean requireApproval,
+            /* Hindi pa na-verify ang email */
+            long awaitingEmail,
+            long revoked) {}
 
-    public record EnrollmentLinkRequest(Long semesterId, String dueDate, Boolean open) {}
-
-    public record ClaimRequest(String token, String studentNumber, String email) {}
-
-    /**
-     * Isang row sa Accounts tab. status: "pending" (nag-enroll, hinihintay ang coordinator),
-     * "active" (may account na), o "none" (hindi pa nag-enroll)
-     */
-    public record AccountRow(
-            Long studentId,
-            Long requestId,
-            String studentNumber,
-            String lastname,
-            String firstname,
-            String middleInitial,
-            String year,
-            String email,
-            String status,
-            String requestedAt,
-            boolean mustChangePassword) {}
-
-    public record AcceptAllResult(int accepted, int skipped) {}
-
-    /** Mga request ID na pinili sa Accounts tab para sa bulk accept/reject */
-    public record BulkRequestIds(java.util.List<Long> requestIds) {}
+    /** requireApproval: null = huwag baguhin */
+    public record EnrollmentLinkRequest(Long semesterId, String dueDate, Boolean open, Boolean requireApproval) {}
 
     /** Resulta ng pag-accept/reset; ang temporaryPassword ay ang default password (ID + initials) */
     public record ApprovalResult(

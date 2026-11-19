@@ -1,5 +1,7 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.ActionException;
+import com.iodev.practicum.service.RequirementTitleService;
 import com.iodev.practicum.dto.RequirementManagementDtos.*;
 import com.iodev.practicum.model.Coordinator;
 import com.iodev.practicum.model.DocumentRequirement;
@@ -42,7 +44,9 @@ public class RequirementManagementController {
             "January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December");
 
-    @Autowired
+    @Autowired private RequirementTitleService requirementTitleService;
+
+        @Autowired
     private CoordinatorRepository coordinatorRepository;
 
     @Autowired
@@ -105,12 +109,12 @@ public class RequirementManagementController {
         if (!r.getCoordinator().getId().equals(coordinator.getId())) return notOwner();
         if (request == null) return ResponseEntity.badRequest().body("Request body is required.");
 
-        String title = clean(request.title());
-        if (title.isEmpty()) return ResponseEntity.badRequest().body("Title is required.");
-        if (title.length() > 255) return ResponseEntity.badRequest().body("Title is too long (max 255 characters).");
-        boolean builtIn = EvaluationAccess.isBuiltIn(r);
-        if (builtIn && !title.equals(r.getTitle())) {
-            return ResponseEntity.status(409).body("Built-in requirements can't be renamed.");
+        // Nasa RequirementTitleService ang tuntunin ng pamagat (iisa para sa Requirements page at sa mga report)
+        String title;
+        try {
+            title = requirementTitleService.validateTitle(r, request.title());
+        } catch (ActionException e) {
+            return e.toResponse();
         }
 
         String instructions = request.instructions() == null ? "" : request.instructions().trim();
@@ -125,9 +129,10 @@ public class RequirementManagementController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
 
-        if (!builtIn && requirementRepository.titleExistsExcluding(
-                coordinator.getId(), r.getSemester().getId(), r.getType(), title, id)) {
-            return ResponseEntity.status(409).body("You already have a requirement with that title in this tab.");
+        try {
+            requirementTitleService.checkUnique(r, title);
+        } catch (ActionException e) {
+            return e.toResponse();
         }
 
         r.setTitle(title);

@@ -119,8 +119,19 @@ public class ReportSourceService {
             if (start.isEmpty()) start = nz(s.getDeployedDate());
             studentRows.add(new StudentRow(s.getId(), nz(s.getLastname()), nz(s.getFirstname()), nz(s.getMiddleInitial()),
                     programAbbr, nz(s.getYear()), nz(s.getGender()), nz(s.getStatus()), start, nz(s.getCompletedDate()),
-                    d == null ? null : d.getId(), c == null ? null : c.getId()));
+                    d == null ? null : d.getId(), c == null ? null : c.getId(), nz(s.getStartTrainingDate()),
+                    nz(s.getContact()), nz(s.getEmail()), nz(s.getBirthday()), nz(s.getAddress()), nz(s.getParent()),
+                    nz(s.getGuardian()), StudentProfileService.hasAccount(s)));
         }
+
+        // Mga company na pwedeng pag-assign-an (aktibo ngayong semester)
+        Set<Long> assignableCompanies = new HashSet<>();
+        companies.forEach(c -> { if (!Boolean.TRUE.equals(c.getIsArchived())) assignableCompanies.add(c.getId()); });
+        Set<Long> assignableDepartments = new HashSet<>();
+        departments.stream()
+                .filter(d -> assignableCompanies.contains(d.getCompany().getId()) && !Boolean.TRUE.equals(d.getIsArchived())
+                        && "approved".equalsIgnoreCase(nz(d.getStatus())))
+                .forEach(d -> assignableDepartments.add(d.getId()));
 
         // Kasama rin ang company ng mga student kahit wala na ito sa listahan ng maa-assign (hal. naka-archive)
         Map<Long, Company> allCompanies = new LinkedHashMap<>();
@@ -132,7 +143,9 @@ public class ReportSourceService {
 
         List<CompanyRow> companyRows = allCompanies.values().stream()
                 .map(c -> new CompanyRow(c.getId(), nz(c.getName()),
-                        nz(c.getAddress()).isEmpty() ? nz(c.getLocation()) : nz(c.getAddress())))
+                        nz(c.getAddress()).isEmpty() ? nz(c.getLocation()) : nz(c.getAddress()),
+                        nz(c.getAddress()), assignableCompanies.contains(c.getId()),
+                        SupervisorResolver.clean(c.getImsupFullname()), SupervisorResolver.clean(c.getImsupPosition())))
                 .toList();
 
         // Pareho: ang department ng student kahit hindi na aktibo, para hindi mawala ang pangalan
@@ -145,7 +158,13 @@ public class ReportSourceService {
         List<DepartmentRow> departmentRows = allDepartments.values().stream()
                 .map(d -> new DepartmentRow(d.getId(), d.getCompany().getId(), nz(d.getName()),
                         SupervisorResolver.forDepartment(d).name(), SupervisorResolver.forDepartment(d).position(),
-                        d.getSlots() == null ? 0 : d.getSlots(), perDepartment.getOrDefault(d.getId(), 0)))
+                        d.getSlots() == null ? 0 : d.getSlots(), perDepartment.getOrDefault(d.getId(), 0),
+                        SupervisorResolver.clean(d.getSupervisorFullname()),
+                        SupervisorResolver.clean(d.getSupervisorPosition()),
+                        assignableDepartments.contains(d.getId()),
+                        // Saan galing ang ipinapakitang supervisor: department, company (fallback), o wala.
+                        // Kapareho ng resolver (ang N/A ay company muna), para ang pag-edit ay tumama sa tamang panig.
+                        SupervisorResolver.sourceOf(d)))
                 .toList();
         return new Data(studentRows, companyRows, departmentRows);
     }
@@ -216,9 +235,17 @@ public class ReportSourceService {
                     perRequirement));
         }
         List<ListRequirement> columns = requirements.stream()
-                .map(r -> new ListRequirement(r.getId(), nz(r.getTitle()), nz(r.getType()).toLowerCase()))
+                .map(r -> new ListRequirement(r.getId(), nz(r.getTitle()), nz(r.getType()).toLowerCase(),
+                        EvaluationAccess.isBuiltIn(r)))
                 .toList();
-        return new ListData(columns, rows);
+        // Mga section na ginagamit na (para sa dropdown; walang bagong section mula sa report)
+        List<String> sections = students.stream()
+                .map(s -> nz(s.getSubjectCode()))
+                .filter(v -> !v.isEmpty())
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+        return new ListData(columns, rows, sections);
     }
 
     private static String nz(String v) {

@@ -11,7 +11,9 @@ export function EditModeSwitch({ on, onChange }: { on: boolean; onChange: (on: b
       aria-checked={on}
       variant={on ? "default" : "outline"}
       size="sm"
-      title={on ? "Edit mode is on. Edits change this report only." : "Turn on to edit this report's tables."}
+      title={on
+        ? "Edit mode is on. Use Save changes to database to write changes to real records."
+        : "Turn on to edit this report and its records."}
       className={cn("gap-1.5")}
       onClick={() => onChange(!on)}
     >

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useSignatoryControls } from "@/hooks/useSignatoryControls";
+import { useEditSession } from "@/hooks/useEditSession";
 import { useReportDraft } from "@/hooks/useReportDraft";
 import { useSignatories } from "@/hooks/useSignatories";
 import { useUndoRedo } from "@/hooks/useUndoRedo";
@@ -10,7 +12,10 @@ import {
   parseAnnualContent, summaryHasEdits, summaryOf,
 } from "@/lib/annualReport";
 import { signatoryOf } from "@/lib/hteCells";
+import { builtInAsSignatories } from "@/lib/manualSignatories";
+import { displayOf } from "@/lib/reportDisplay";
 import { paperSize } from "@/lib/paperExport";
+import { annualCellSpec } from "@/lib/reportFields";
 import { annualExcel, downloadExcel } from "@/lib/reportExcel";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,7 +24,12 @@ import { AnnualSheet, type AnnualEditBindings } from "@/components/reports/Annua
 import { ReportPreviewDialog } from "@/components/reports/ReportPreviewDialog";
 import { CellActions, CellActionsBar, type CellInfo } from "@/components/reports/editor/CellActions";
 import { CellSheet } from "@/components/reports/editor/CellSheet";
-import { ColumnPickerButton } from "@/components/reports/editor/ColumnPicker";
+import {
+  AdvancedControl, CheckField, ColumnsControl, FixedInfo, PageControl, ReportSettingsLayout, SettingsSection,
+  SignatoriesControl, TextAreaField, TextField,
+} from "@/components/reports/settings/ReportSettingsSidebar";
+import { ANNUAL_PAGE_DEFAULTS, DEFAULT_ISSUE_COLUMNS, DEFAULT_SUMMARY_COLUMNS } from "@/lib/annualReport";
+import { DEFAULT_DISPLAY } from "@/types/reports";
 import { EDIT_CSS } from "@/components/reports/editor/editCss";
 import { EditorContext, type ActiveCell, type CellFocusInfo, type EditorApi } from "@/components/reports/editor/editorContext";
 import { EditorToolbar } from "@/components/reports/editor/EditorToolbar";
@@ -41,7 +51,7 @@ const issueOf = (cellId: string) => (cellId.startsWith("i:") ? cellId.split(":")
 
 /** Editor sa mismong papel ng Annual Report (Annex C) */
 export function AnnualEditor({ reportId }: { reportId: number }) {
-  const { content, source, update, get, status, loadError, retry, gone, title, setTitle, saveNow } =
+  const { content, source, update, get, status, loadError, retry, gone, title, setTitle, replaceSource } =
     useReportDraft<AnnualContent>({ reportId, build: buildAnnualContent, parse: parseAnnualContent });
   const sig = useSignatories(source?.context ?? null);
   const history = useUndoRedo<Snapshot>();
@@ -54,8 +64,11 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
   const [sheetCell, setSheetCell] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  // Pirmahan sa dulo: naka-save sa device lang; pumapalit sa built-in kapag mayroon
+  const sign = useSignatoryControls(reportId, { hasBuiltIn: true, title: title || "Annual Report" });
+  // Sidebar ng mga setting: bukas sa desktop, sarado (bottom sheet) sa telepono
+  const [settingsOpen, setSettingsOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 768);
   const [oversized, setOversized] = useState<string[]>([]);
-  const [editMode, setEditMode] = useState(false);
   const [currentCell, setCurrentCell] = useState<string | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -92,14 +105,8 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
   };
 
   const onText = (id: string, value: string) => {
-    const s = signatoryOf(id);
-    if (s) {
-      const cur = get();
-      if (!cur) return;
-      history.record({ content: cur, sig: sig.getSaved() }, id);
-      sig.set(s.role, s.field, value);
-      return;
-    }
+    // Ang pirmahan ay dumadaan sa "Save changes to database", hindi diretsong isine-save
+    if (signatoryOf(id)) return;
     mutate((c) => applyAnnualCell(c, id, value), id);
   };
 
@@ -108,9 +115,48 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
     if (el && el.isContentEditable && el.closest("[data-editor-root]")) el.blur();
   };
 
+  // Edit mode: lahat ng nasa Annual Report ay sa report lang (walang tunay na record na isinusulat dito)
+  const session = useEditSession<AnnualContent>({
+    reportId,
+    source,
+    get,
+    mutate,
+    onCommitted: (fresh, changes) => {
+      replaceSource(fresh);
+      // Pinalitang pangalan ng company o department: inaayon ang mga label sa buod (ang mga bilang ay hindi ginagalaw)
+      const companyName = new Map(fresh.data.companies.map((x) => [x.id, x.name]));
+      const deptName = new Map(fresh.data.departments.map((x) => [x.id, x.name]));
+      const companies = new Set(changes.filter((x) => x.target === "company" && x.field === "name").map((x) => x.id));
+      const depts = new Set(changes.filter((x) => x.target === "department" && x.field === "name").map((x) => x.id));
+      if (companies.size > 0 || depts.size > 0) {
+        mutate((cur) => ({
+          ...cur,
+          summary: cur.summary.map((r) => {
+            const parts = r.key.split(":");
+            const cid = Number(parts.find((p) => p.startsWith("c"))?.slice(1));
+            const did = Number(parts.find((p) => p.startsWith("d"))?.slice(1));
+            return {
+              ...r,
+              company: companies.has(cid) ? (companyName.get(cid) ?? r.company) : r.company,
+              department: depts.has(did) ? (deptName.get(did) ?? r.department) : r.department,
+            };
+          }),
+        }));
+      }
+      if (changes.some((x) => x.target === "signatory")) void sig.refresh();
+    },
+    onEditMode: () => {
+      flushTyping();
+      setActiveRow(null);
+      setCurrentCell(null);
+      setSheetCell(null);
+    },
+  });
+  const editMode = session.editMode;
+  const manual = { items: sign.items, showBuiltIn: sign.showBuiltIn };
+
   const apply = (s: Snapshot) => {
     update(s.content);
-    if (JSON.stringify(s.sig) !== JSON.stringify(sig.getSaved())) sig.replace(s.sig);
   };
   const undo = () => {
     flushTyping();
@@ -224,19 +270,27 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
 
   const c = content;
   const people = sig.values;
-  const cells = annualCells(c, people);
-  const labels = new Map(cells.map((x) => [x.id, x.label]));
+  const allCells = annualCells(c, people);
+  // Ang mga bilang sa buod ay may sariling input (numero); ang iba ay tekstong diretsong nae-edit sa papel
+  const cells = allCells.filter((x) => !x.id.startsWith("sum:") && !x.id.startsWith("sig:"));
+  const labels = new Map(allCells.map((x) => [x.id, x.label]));
   const paperWidth = paperSize(c.settings.orientation, c.settings.paper).width;
   const live = annualLiveIndex(c, source);
-  const valueOf = new Map(cells.map((x) => [x.id, x.value]));
+  const valueOf = new Map(allCells.map((x) => [x.id, x.value]));
+
+  /** Teksto sa papel na binago: itinatala rin para sa buod ng Edit mode (sa report lang ito) */
+  const onTextNoted = (id: string, value: string) => {
+    onText(id, value);
+    session.noteReportOnly({ key: `annual:${id}`, label: labels.get(id) ?? "Text", who: "", system: live.get(id) ?? null, value });
+  };
 
   const cellInfo = (id: string | null): CellInfo | null => {
     if (!id || !valueOf.has(id)) return null;
-    return { label: labels.get(id) ?? "Text", value: valueOf.get(id) ?? "", live: live.get(id) ?? null, canApply: false };
+    return { label: labels.get(id) ?? "Text", value: valueOf.get(id) ?? "", live: live.get(id) ?? null };
   };
   const resetCell = (id: string) => {
     const value = live.get(id);
-    if (value !== undefined) onText(id, value);
+    if (value !== undefined) onTextNoted(id, value);
   };
   const current = editMode && !touch ? cellInfo(currentCell) : null;
 
@@ -254,11 +308,15 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
     if (splits && summaryHasEdits(c, source)) setConfirm({ columns });
     else setSummaryColumns(columns);
   };
-  const toggleIssue = (key: string, on: boolean) =>
-    mutate((cur) => ({ ...cur, issueColumns: on ? [...cur.issueColumns, key] : cur.issueColumns.filter((k) => k !== key) }));
 
   const bindings: AnnualEditBindings = {
-    onText,
+    onText: onTextNoted,
+    typed: (id, kind) =>
+      annualCellSpec(c, id, source, labels.get(id) ?? "Text", kind, valueOf.get(id) ?? "", live.get(id) ?? null, (v) => onText(id, v)),
+    pending: session.pending,
+    problems: session.problems,
+    saved: session.saved,
+    onOpen: session.setOpenSpec,
     labelOf: (id) => labels.get(id) ?? "Text",
     isEdited: (id) => live.has(id) && valueOf.has(id) && live.get(id) !== valueOf.get(id),
     selectedRow: activeRow,
@@ -319,7 +377,7 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
   return (
     <div ref={rootRef} data-editor-root className="min-w-0">
       <style>{EDIT_CSS}</style>
-      <ReportHeader title={title} onTitle={setTitle} typeLabel="Annual Report (Annex C)" semesterName={ctx.semesterName} />
+      <ReportHeader title={title} typeLabel="Annual Report (Annex C)" semesterName={ctx.semesterName} />
 
       <EditorToolbar
         canUndo={history.canUndo}
@@ -331,36 +389,14 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
         onFit={() => setZoom("fit")}
         onActual={() => setZoom(1)}
         status={status}
-        onSave={() => { flushTyping(); void saveNow(); }}
         editMode={editMode}
-        onEditMode={(on) => {
-          flushTyping();
-          setEditMode(on);
-          setActiveRow(null);
-          setCurrentCell(null);
-          setSheetCell(null);
-        }}
-        extra={
-          <ColumnPickerButton
-            groups={[
-              {
-                legend: "Summary table",
-                columns: SUMMARY_COLUMNS.map((x) => ({ key: x.key, label: x.label })),
-                selected: c.summaryColumns,
-                onToggle: toggleSummary,
-              },
-              {
-                legend: "Issues table",
-                columns: ISSUE_COLUMNS.map((x) => ({ key: x.key, label: x.label })),
-                selected: c.issueColumns,
-                onToggle: toggleIssue,
-              },
-            ]}
-          />
-        }
-        settings={c.settings}
-        onSettings={(settings) => mutate((cur) => ({ ...cur, settings }), "settings")}
-        allowOrientation
+        onEditMode={(on) => { flushTyping(); session.requestEditMode(on); }}
+        pendingCount={session.count}
+        onSaveToDatabase={session.openSave}
+        onDiscardChanges={session.requestDiscard}
+        reportOnlyCount={session.reportOnlyCount}
+        settingsOpen={settingsOpen}
+        onToggleSettings={() => setSettingsOpen((o) => !o)}
         onReload={() => setConfirm("regenerate")}
         onClear={() => setConfirm("clear")}
         onPreview={() => { flushTyping(); setShowPreview(true); }}
@@ -382,6 +418,79 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
         </Alert>
       )}
 
+      <ReportSettingsLayout
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        sidebar={
+          <>
+            <SettingsSection title="Report" onReset={() => mutate((cur) => ({ ...cur, subtitle: "", headerText: "", footerText: "" }))}>
+              <TextField label="Title" value={title} onChange={setTitle} placeholder="Annual Report" />
+              <TextField label="Subtitle" value={c.subtitle ?? ""} onChange={(v) => mutate((cur) => ({ ...cur, subtitle: v }), "subtitle")} />
+              <TextAreaField label="Header text" value={c.headerText ?? ""} placeholder="Printed before the summary"
+                onChange={(v) => mutate((cur) => ({ ...cur, headerText: v }), "header")} />
+              <TextAreaField label="Footer text" value={c.footerText ?? ""} placeholder="Printed after the tables, on the last page"
+                onChange={(v) => mutate((cur) => ({ ...cur, footerText: v }), "footer")} />
+              <p className="text-xs text-muted-foreground">The title lines, HEI, address, degree program and narrative are edited on the paper.</p>
+            </SettingsSection>
+
+            <SettingsSection title="Data and filters">
+              <FixedInfo items={[
+                { label: "Semester", value: ctx.semesterName },
+                { label: "Course", value: ctx.programAbbreviation || ctx.programName },
+              ]} />
+              <p className="text-xs text-muted-foreground">The summary counts every student. Use Regenerate to recount it from live data.</p>
+            </SettingsSection>
+
+            <SettingsSection title="Columns" onReset={() => {
+              const split = c.summaryColumns.filter((k) => ["company", "department"].includes(k));
+              mutate((cur) => ({ ...cur, summaryColumns: [...DEFAULT_SUMMARY_COLUMNS, ...split], issueColumns: [...DEFAULT_ISSUE_COLUMNS] }));
+            }}>
+              <ColumnsControl groups={[
+                {
+                  legend: "Summary table",
+                  columns: SUMMARY_COLUMNS.filter((x) => !["company", "department"].includes(x.key)).map((x) => ({ key: x.key, label: x.label })),
+                  selected: c.summaryColumns.filter((k) => !["company", "department"].includes(k)),
+                  onChange: (next) => mutate((cur) => ({
+                    ...cur,
+                    summaryColumns: [...next, ...cur.summaryColumns.filter((k) => ["company", "department"].includes(k))],
+                  }), "columns"),
+                },
+                {
+                  legend: "Issues table",
+                  columns: ISSUE_COLUMNS.map((x) => ({ key: x.key, label: x.label })),
+                  selected: c.issueColumns,
+                  onChange: (next) => mutate((cur) => ({ ...cur, issueColumns: next }), "columns"),
+                },
+              ]} />
+            </SettingsSection>
+
+            <SettingsSection title="Sorting and grouping" onReset={() => {
+              if (c.summaryColumns.includes("company")) toggleSummary("company", false);
+              else if (c.summaryColumns.includes("department")) toggleSummary("department", false);
+            }}>
+              <CheckField label="Split the summary by company" checked={c.summaryColumns.includes("company")}
+                onChange={(v) => toggleSummary("company", v)} />
+              <CheckField label="Split the summary by department" checked={c.summaryColumns.includes("department")}
+                onChange={(v) => toggleSummary("department", v)}
+                hint="Splitting rebuilds the summary rows from the system and asks first if you edited them." />
+            </SettingsSection>
+
+            <SettingsSection title="Page" onReset={() => mutate((cur) => ({ ...cur, settings: { ...ANNUAL_PAGE_DEFAULTS } }), "settings")}>
+              <PageControl settings={c.settings} onChange={(settings) => mutate((cur) => ({ ...cur, settings }), "settings")} />
+            </SettingsSection>
+
+            <SettingsSection title="Signatories" count={sign.items.length}>
+              <SignatoriesControl items={sign.items} onAdd={sign.add} onEdit={sign.edit} onDelete={sign.remove} onManage={sign.manage}
+                builtIn={{ checked: sign.showBuiltIn, onChange: sign.setShowBuiltIn }} />
+            </SettingsSection>
+
+            <SettingsSection title="Advanced" defaultOpen={false} onReset={() => mutate((cur) => ({ ...cur, display: { ...DEFAULT_DISPLAY } }))}>
+              <AdvancedControl display={displayOf(c.display)} onChange={(next) => mutate((cur) => ({ ...cur, display: next }))}
+                show={{ striped: true, blank: true }} />
+            </SettingsSection>
+          </>
+        }
+      >
       <EditorContext.Provider value={api}>
         <PaperSurface
           paperWidth={paperWidth}
@@ -410,13 +519,19 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
               signatories={people}
               mode={editMode ? "edit" : "preview"}
               edit={editMode ? bindings : undefined}
+              manual={{
+                ...manual,
+                onAdd: sign.add,
+                ...(editMode ? { onEdit: sign.edit, onDelete: sign.remove } : {}),
+              }}
             />
           </div>
         </PaperSurface>
       </EditorContext.Provider>
+      </ReportSettingsLayout>
 
       {current && currentCell && (
-        <CellActionsBar info={current} onReset={() => resetCell(currentCell)} onApply={() => {}} />
+        <CellActionsBar info={current} onReset={() => resetCell(currentCell)} />
       )}
       {editMode && (
         <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => addRow(null)}>
@@ -430,7 +545,7 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
         cells={cells}
         openId={sheetCell}
         onClose={() => setSheetCell(null)}
-        onCommit={onText}
+        onCommit={onTextNoted}
         onNavigate={(id) => {
           setSheetCell(id);
           setCurrentCell(id);
@@ -440,10 +555,14 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
         renderExtra={(cell) => {
           const state = cellInfo(cell.id);
           return state && (
-            <CellActions info={state} onReset={() => { resetCell(cell.id); setSheetCell(null); }} onApply={() => {}} />
+            <CellActions info={state} onReset={() => { resetCell(cell.id); setSheetCell(null); }} />
           );
         }}
       />
+
+      {session.dialogs}
+
+      {sign.panel}
 
       <ReportPreviewDialog
         open={showPreview}
@@ -453,8 +572,8 @@ export function AnnualEditor({ reportId }: { reportId: number }) {
         settings={c.settings}
         onSettings={(settings) => mutate((cur) => ({ ...cur, settings }), "settings")}
         allowOrientation
-        onExcel={() => downloadExcel(annualExcel(c, title || "Annual Report", ctx))}
-        renderSheet={(mode) => <AnnualSheet content={c} context={ctx} signatories={people} mode={mode} />}
+        onExcel={() => downloadExcel({ ...annualExcel(c, title || "Annual Report", ctx), signatories: manual.items.length === 0 ? [] : manual.showBuiltIn ? [...builtInAsSignatories(people), ...manual.items] : manual.items })}
+        renderSheet={(mode) => <AnnualSheet content={c} context={ctx} signatories={people} mode={mode} manual={manual} />}
       />
 
       <ConfirmDialog

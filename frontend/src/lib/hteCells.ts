@@ -57,11 +57,17 @@ export const HTE_COLUMNS = [
   { key: "department", label: "Department" },
 ] as const;
 
-const DEFAULT_HTE_COLUMNS = ["company", "name", "program", "gender", "period"];
+export const DEFAULT_HTE_COLUMNS = ["company", "name", "program", "gender", "period"];
 
+/**
+ * Mga napiling column sa ayos ng papel. Laging una ang Company (sakop nito ang mga row ng mga student nito);
+ * ang iba ay sa ayos na pinili ng coordinator. Laging kasama ang pangalan.
+ */
 export function hteColumnsOf(content: HteContent): string[] {
-  const chosen = content.columns ?? DEFAULT_HTE_COLUMNS;
-  return HTE_COLUMNS.map((c) => c.key as string).filter((k) => chosen.includes(k));
+  const known = new Set(HTE_COLUMNS.map((c) => c.key as string));
+  const chosen = [...new Set((content.columns ?? DEFAULT_HTE_COLUMNS).filter((k) => known.has(k)))];
+  if (!chosen.includes("name")) chosen.push("name");
+  return [...(chosen.includes("company") ? ["company"] : []), ...chosen.filter((k) => k !== "company")];
 }
 type StudentField = keyof typeof STUDENT_FIELDS;
 

@@ -20,6 +20,7 @@ import com.iodev.practicum.repository.StudentRepository;
 import com.iodev.practicum.model.SubmissionFile;
 import com.iodev.practicum.repository.SubmissionFileRepository;
 import com.iodev.practicum.service.S3PresignService;
+import com.iodev.practicum.service.RequirementReviewService;
 import com.iodev.practicum.util.SubmissionStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -53,6 +54,7 @@ public class ReviewController {
             Map.of(4, "EXCELLENT", 3, "VERY_GOOD", 2, "GOOD", 1, "POOR");
     private static final ReviewCell EMPTY = new ReviewCell("ASSIGNED", null, null, false);
 
+    @Autowired private RequirementReviewService requirementReviewService;
     @Autowired private CoordinatorRepository coordinatorRepository;
     @Autowired private StudentRepository studentRepository;
     @Autowired private MonthlyWeeklyReportRepository reportRepository;
@@ -366,29 +368,9 @@ public class ReviewController {
     }
 
     private ResponseEntity<?> updateRequirement(Ctx ctx, String key, String stored, Timestamp now) {
-        List<DocumentRequirementAttachment> rows = attachmentRepository
-                .findByStudentIdAndDocumentRequirementId(ctx.student().getId(), ctx.requirement().getId());
-
-        if (rows.isEmpty()) {
-            if (key.equals("ASSIGNED")) return ResponseEntity.ok(new CellResult(EMPTY, null));
-
-            // Wala pang naipapasa: gumawa ng record na walang file para maitala ang status
-            DocumentRequirementAttachment record = new DocumentRequirementAttachment();
-            record.setDocumentRequirement(ctx.requirement());
-            record.setStudent(ctx.student());
-            record.setFilePath(null);
-            record.setStatus(stored);
-            record.setCreatedAt(now);
-            record.setUpdatedAt(now);
-            attachmentRepository.save(record);
-        } else {
-            // Hindi binubura ang file, status lang ang nagbabago
-            for (DocumentRequirementAttachment a : rows) {
-                a.setStatus(stored);
-                a.setUpdatedAt(now);
-            }
-            attachmentRepository.saveAll(rows);
-        }
+        // Nasa RequirementReviewService ang pagsulat (iisa para sa review screen at sa mga report)
+        boolean changed = requirementReviewService.setStatus(ctx.student(), ctx.requirement(), key, stored, now);
+        if (!changed) return ResponseEntity.ok(new CellResult(EMPTY, null));
         return ResponseEntity.ok(new CellResult(new ReviewCell(key, null, null, false), null));
     }
 

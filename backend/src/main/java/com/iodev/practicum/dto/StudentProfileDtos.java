@@ -12,13 +12,20 @@ public final class StudentProfileDtos {
             String status, String semester, String coordinatorName,
             String companyName, String departmentName,
             BigDecimal renderedHours, BigDecimal trainingDuration,
-            boolean mustChangePassword, boolean privacyAcknowledged) {}
+            boolean mustChangePassword, boolean privacyAcknowledged,
+            boolean profileRequired, ProfileDetails details) {}
+
+    /** Mga detalye para sa "Complete your profile" (ang unang 5 ay read-only doon) */
+    public record ProfileDetails(
+            String middleInitial, String gender, String year, String course,
+            String contact, String birthday, String address, String parent, String guardian) {}
 
     public record CompanyDepartment(Long id, String name, int slots, int filled) {}
 
+    /** skills: mga skill na hinahanap ng company (para sa pagtutugma sa skills ng student) */
     public record CompanyEntry(Long id, String name, String address, String location,
                                String contactNumber, String nature,
-                               List<CompanyDepartment> departments) {}
+                               List<CompanyDepartment> departments, List<String> skills) {}
 
     public record CompaniesResponse(String status, boolean canApply, List<CompanyEntry> companies) {}
 

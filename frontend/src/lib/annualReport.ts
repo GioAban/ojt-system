@@ -1,9 +1,10 @@
 // Annual Report (Annex C): buod mula sa datos ng system at mga isyung tina-type ng coordinator.
 
+import { displayOf } from "@/lib/reportDisplay";
 import { newId } from "@/lib/hteReport";
 import { signatoryLive, type CellDef } from "@/lib/hteCells";
 import {
-  DEFAULT_PAGE_SETTINGS,
+  DEFAULT_DISPLAY, DEFAULT_PAGE_SETTINGS,
   type AnnualContent, type AnnualIssue, type AnnualSummaryRow, type ReportContext, type ReportSource,
   type SignatoryRole, type SignatorySet,
 } from "@/types/reports";
@@ -38,13 +39,18 @@ export const ISSUE_COLUMNS: { key: keyof Omit<AnnualIssue, "id">; label: string;
   { key: "recommendation", label: "RECOMMENDATIONS", placeholder: "Recommendation" },
 ];
 
-/** Ang mga napiling column ng dalawang table */
+/** Ang mga napiling column ng dalawang table, sa ayos na pinili ng coordinator */
 export function annualColumns(c: AnnualContent) {
   return {
-    summary: SUMMARY_COLUMNS.filter((col) => c.summaryColumns.includes(col.key)),
-    issues: ISSUE_COLUMNS.filter((col) => c.issueColumns.includes(col.key)),
+    summary: c.summaryColumns.map((k) => SUMMARY_COLUMNS.find((col) => col.key === k)).filter((x) => x !== undefined),
+    issues: c.issueColumns.map((k) => ISSUE_COLUMNS.find((col) => col.key === k)).filter((x) => x !== undefined),
   };
 }
+
+export const DEFAULT_SUMMARY_COLUMNS = DEFAULT_SUMMARY;
+export const DEFAULT_ISSUE_COLUMNS = ISSUE_COLUMNS.map((col) => col.key as string);
+/** Default ng papel ng Annual Report */
+export const ANNUAL_PAGE_DEFAULTS = { ...DEFAULT_PAGE_SETTINGS, orientation: "landscape" as const };
 
 export const blankIssue = (): AnnualIssue => ({ id: newId(), issue: "", solution: "", recommendation: "" });
 
@@ -53,9 +59,11 @@ const isDeployed = (status: string) => {
   return s === "deployed" || s === "completed";
 };
 
+// "N/A" kapag walang department ang company (pareho sa ibang report)
 const cleanDepartment = (name: string | undefined) => {
-  const v = (name ?? "").trim();
-  return v.toUpperCase() === "N/A" ? "" : v;
+  if (name === undefined) return "";
+  const v = name.trim();
+  return !v || v.toUpperCase() === "N/A" ? "N/A" : v;
 };
 
 /** Hinahati ng Company at Department ang buod: isang row bawat company o department; kung wala, isang kabuuan */
@@ -120,6 +128,10 @@ export function buildAnnualContent(source: ReportSource): AnnualContent {
     issues: [blankIssue(), blankIssue(), blankIssue()],
     issueColumns: ISSUE_COLUMNS.map((col) => col.key),
     settings: { ...DEFAULT_PAGE_SETTINGS, orientation: "landscape" },
+    subtitle: "",
+    headerText: "",
+    footerText: "",
+    display: { ...DEFAULT_DISPLAY },
   };
 }
 
@@ -148,6 +160,11 @@ export function parseAnnualContent(raw: unknown): AnnualContent | null {
     })),
     issueColumns: Array.isArray(c.issueColumns) ? c.issueColumns : ISSUE_COLUMNS.map((col) => col.key),
     settings: { ...DEFAULT_PAGE_SETTINGS, ...(c.settings ?? {}) },
+    pending: c.pending && typeof c.pending === "object" ? c.pending : {},
+    subtitle: text(c.subtitle),
+    headerText: text(c.headerText),
+    footerText: text(c.footerText),
+    display: displayOf(c.display),
   };
 }
 

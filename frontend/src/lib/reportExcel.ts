@@ -1,11 +1,13 @@
 // Pag-download bilang Excel (.xlsx) sa browser: kung ano ang nasa screen (mga napiling column, filter, ayos at edit).
 // Hiwalay na chunk ang ExcelJS: nilo-load lang kapag pinindot ang Download Excel.
 
+import { signatoryRows, type ManualSignatory, type SignAlign } from "@/lib/manualSignatories";
 import { annualColumns } from "@/lib/annualReport";
 import { hteColumnsOf, resolveTitle } from "@/lib/hteCells";
-import { cellOf, templateColumns, visibleUnits } from "@/lib/listTemplates";
+import { cellOf, orderedColumns, visibleUnits } from "@/lib/listTemplates";
+import { EXCEL_DATE_FORMAT, blankText, displayOf, formatDates } from "@/lib/reportDisplay";
 import type {
-  AnnualContent, HteContent, HteVariant, ListContent, ReportContext,
+  AnnualContent, DateFormat, DisplaySettings, HteContent, HteVariant, ListContent, ReportContext,
 } from "@/types/reports";
 
 export type ExcelKind = "text" | "number" | "date";
@@ -27,6 +29,14 @@ export interface ExcelDocument {
   title: string;
   context: ReportContext;
   tables: ExcelTable[];
+  /** Pirmahan sa ibaba (pagkatapos ng isang blangkong row); wala = walang pirmahan */
+  signatories?: ManualSignatory[];
+  /** Mula sa sidebar: subtitle sa ilalim ng pamagat, teksto bago at pagkatapos ng mga table */
+  subtitle?: string;
+  headerText?: string;
+  footerText?: string;
+  /** Format ng mga petsa sa Excel (nananatiling tunay na petsa) */
+  dateFormat?: DateFormat;
 }
 
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
@@ -84,7 +94,13 @@ export async function downloadExcel(doc: ExcelDocument) {
     if (!value) continue;
     const row = ws.addRow([label ? `${label}: ${value}` : value]);
     if (!label) row.font = { bold: true, size: 14 };
+    if (!label && doc.subtitle?.trim()) ws.addRow([doc.subtitle.trim()]).font = { italic: true };
   }
+  if (doc.headerText?.trim()) {
+    ws.addRow([]);
+    ws.addRow([doc.headerText.trim()]).alignment = { wrapText: true, vertical: "top" };
+  }
+  const dateFormat = EXCEL_DATE_FORMAT[doc.dateFormat ?? "long"];
 
   const widths: number[] = [];
   const grow = (i: number, text: string) => {
@@ -119,10 +135,44 @@ export async function downloadExcel(doc: ExcelDocument) {
       row.alignment = { wrapText: true, vertical: "top" };
       r.cells.forEach((value, i) => {
         grow(i, value);
-        if (row.getCell(i + 1).value instanceof Date) row.getCell(i + 1).numFmt = "mmmm d, yyyy";
+        if (row.getCell(i + 1).value instanceof Date) row.getCell(i + 1).numFmt = dateFormat;
       });
     }
   }
+  if (doc.footerText?.trim()) {
+    ws.addRow([]);
+    ws.addRow([doc.footerText.trim()]).alignment = { wrapText: true, vertical: "top" };
+  }
+
+  // Pirmahan: kaliwa sa unang column, gitna sa gitnang column, kanan sa huling column ng table
+  const signers = doc.signatories ?? [];
+  if (signers.length > 0) {
+    const span = Math.max(3, ...doc.tables.map((t) => t.columns.length));
+    const col: Record<SignAlign, number> = { left: 1, center: Math.ceil(span / 2), right: span };
+    const horizontal: Record<SignAlign, "left" | "center" | "right"> = { left: "left", center: "center", right: "right" };
+    ws.addRow([]);
+    for (const group of signatoryRows(signers)) {
+      ws.addRow([]);
+      const lines: { text: (s: ManualSignatory) => string; bold?: boolean }[] = [
+        ...(group.some((s) => s.label.trim()) ? [{ text: (s: ManualSignatory) => s.label }] : []),
+        { text: () => "" },
+        { text: (s) => s.name.toUpperCase(), bold: true },
+        { text: (s) => s.position },
+        ...(group.some((s) => s.dateLine) ? [{ text: (s: ManualSignatory) => (s.dateLine ? "Date: ______________" : "") }] : []),
+      ];
+      for (const line of lines) {
+        const row = ws.addRow([]);
+        for (const s of group) {
+          const cell = row.getCell(col[s.align]);
+          cell.value = line.text(s);
+          cell.alignment = { horizontal: horizontal[s.align], wrapText: true };
+          if (line.bold) cell.font = { bold: true };
+          grow(col[s.align] - 1, line.text(s));
+        }
+      }
+    }
+  }
+
   widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
   // Isang table lang ang may saysay na i-freeze ang header (ang Annual Report ay may dalawa)
@@ -145,16 +195,32 @@ export async function downloadExcel(doc: ExcelDocument) {
 
 // ---- Laman bawat uri ng report ---------------------------------------------
 
+/** Blangkong cell ayon sa Advanced (ang petsa ay nananatiling petsa para sa Excel) */
+const filled = (value: string, display: DisplaySettings) => (value.trim() ? value : blankText(display.blank));
+
 export function listExcel(c: ListContent, title: string, context: ReportContext): ExcelDocument {
-  const columns = templateColumns(c.template).filter((col) => c.columns.includes(col.key));
+  const columns = orderedColumns(c);
+  const display = displayOf(c.display);
   const rows: ExcelRow[] = visibleUnits(c).map((u) => (u.kind === "group"
     ? { group: `${u.label} (${u.count})` }
-    : { cells: [String(u.number), ...columns.map((col) => cellOf(c, u.row, col.key))] }));
+    : {
+        cells: [
+          ...(display.rowNumbers ? [String(u.number)] : []),
+          ...columns.map((col) => filled(cellOf(c, u.row, col.key), display)),
+        ],
+      }));
   return {
     title,
     context,
+    subtitle: c.subtitle,
+    headerText: c.headerText,
+    footerText: c.footerText,
+    dateFormat: display.dateFormat,
     tables: [{
-      columns: [{ label: "NO.", kind: "number" }, ...columns.map((col) => ({ label: col.label, kind: col.kind }))],
+      columns: [
+        ...(display.rowNumbers ? [{ label: "NO.", kind: "number" as const }] : []),
+        ...columns.map((col) => ({ label: col.label, kind: col.kind })),
+      ],
       rows,
     }],
   };
@@ -162,6 +228,7 @@ export function listExcel(c: ListContent, title: string, context: ReportContext)
 
 export function hteExcel(c: HteContent, title: string, context: ReportContext, variant: HteVariant): ExcelDocument {
   const cols = hteColumnsOf(c);
+  const display = displayOf(c.display);
   const showBullets = !cols.includes("department");
   const rows: ExcelRow[] = [];
   let n = 0;
@@ -176,10 +243,10 @@ export function hteExcel(c: HteContent, title: string, context: ReportContext, v
         else if (col === "name") cells.push(s.name);
         else if (col === "program") cells.push(s.program);
         else if (col === "gender") cells.push(s.gender);
-        else if (col === "period") cells.push(variant === "report" ? s.period : "");
+        else if (col === "period") cells.push(variant === "report" ? formatDates(s.period, display.dateFormat) : "");
         else if (col === "department") cells.push(s.department ?? "");
       }
-      rows.push({ cells: [String(n), ...cells] });
+      rows.push({ cells: [...(display.rowNumbers ? [String(n)] : []), ...cells.map((v) => filled(v, display))] });
     }
   }
   const LABELS: Record<string, string> = {
@@ -189,8 +256,12 @@ export function hteExcel(c: HteContent, title: string, context: ReportContext, v
   return {
     title: title || resolveTitle(c, variant, context).lines.join(" "),
     context,
+    subtitle: c.subtitle,
+    headerText: c.headerText,
+    footerText: c.footerText,
+    dateFormat: display.dateFormat,
     tables: [{
-      columns: [{ label: "NO.", kind: "number" }, ...cols.map((k) => ({ label: LABELS[k] }))],
+      columns: [...(display.rowNumbers ? [{ label: "NO.", kind: "number" as const }] : []), ...cols.map((k) => ({ label: LABELS[k] }))],
       rows,
     }],
   };
@@ -198,19 +269,24 @@ export function hteExcel(c: HteContent, title: string, context: ReportContext, v
 
 export function annualExcel(c: AnnualContent, title: string, context: ReportContext): ExcelDocument {
   const { summary, issues } = annualColumns(c);
+  const display = displayOf(c.display);
   return {
     title,
     context,
+    subtitle: c.subtitle,
+    headerText: c.headerText,
+    footerText: c.footerText,
+    dateFormat: display.dateFormat,
     tables: [
       {
         heading: "A. SUMMARY OF STUDENT INTERNS",
         columns: summary.map((col) => ({ label: col.label, kind: col.kind })),
-        rows: c.summary.map((r) => ({ cells: summary.map((col) => r[col.key]) })),
+        rows: c.summary.map((r) => ({ cells: summary.map((col) => filled(r[col.key], display)) })),
       },
       {
         heading: "B. ISSUES AND CONCERNS, SOLUTIONS AND RECOMMENDATIONS",
         columns: issues.map((col) => ({ label: col.label })),
-        rows: c.issues.map((r) => ({ cells: issues.map((col) => r[col.key]) })),
+        rows: c.issues.map((r) => ({ cells: issues.map((col) => filled(r[col.key], display)) })),
       },
     ],
   };

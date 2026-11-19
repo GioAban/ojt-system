@@ -4,6 +4,7 @@ import { Copy, FileText, Plus, Search, Trash2 } from "lucide-react";
 import api from "@/lib/api";
 import { notify } from "@/lib/notify";
 import { REPORT_TYPES, reportTypeTitle } from "@/lib/reportCatalog";
+import { copyReportSignatories, deleteReportSignatories } from "@/lib/manualSignatories";
 import { deleteReportDraft } from "@/lib/reportDraftStore";
 import { useSemester } from "@/contexts/semesterContext";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -68,7 +69,9 @@ export default function Reports() {
   async function duplicate(r: SavedReportSummary) {
     setBusy(true);
     try {
-      await api.post(`/coordinator/reports/saved/${r.id}/duplicate`);
+      const res = await api.post<SavedReportSummary>(`/coordinator/reports/saved/${r.id}/duplicate`);
+      // Ang pirmahan ay nasa device lang: kinokopya rin sa bagong report
+      if (res.data?.id) await copyReportSignatories(r.id, res.data.id);
       notify.success("Report duplicated.");
       reload();
     } catch {
@@ -84,6 +87,7 @@ export default function Reports() {
     try {
       await api.delete(`/coordinator/reports/saved/${toDelete.id}`);
       await deleteReportDraft(`${localStorage.getItem("email") ?? ""}:saved:${toDelete.id}`);
+      await deleteReportSignatories(toDelete.id);
       notify.success("Report deleted.");
       setToDelete(null);
       reload();

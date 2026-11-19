@@ -1,4 +1,4 @@
-import { Columns3 } from "lucide-react";
+import { Columns3, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 
@@ -15,11 +15,14 @@ interface ColumnPickerProps {
   required?: string[];
   /** null = walang pamagat (iisang grupo sa popover) */
   legend?: string | null;
+  /** Mga column na personal na datos (Data Privacy Act): may marka at paalala */
+  personal?: string[];
 }
 
 /** Mga checkbox ng column; ang huling natitirang column ay hindi maaalis */
-export function ColumnPicker({ columns, selected, onToggle, required = [], legend = "Columns" }: ColumnPickerProps) {
+export function ColumnPicker({ columns, selected, onToggle, required = [], legend = "Columns", personal = [] }: ColumnPickerProps) {
   const shown = columns.filter((c) => selected.includes(c.key)).length;
+  const hasPersonal = columns.some((c) => personal.includes(c.key));
   return (
     <fieldset className="min-w-0">
       {legend !== null && <legend className="block text-xs font-medium text-muted-foreground">{legend}</legend>}
@@ -36,10 +39,24 @@ export function ColumnPicker({ columns, selected, onToggle, required = [], legen
                 onChange={(e) => onToggle(col.key, e.target.checked)}
               />
               {col.label}
+              {personal.includes(col.key) && (
+                <span className="rounded border border-amber-500/40 bg-amber-500/10 px-1 text-[10px] font-medium uppercase text-amber-800 dark:text-amber-300">
+                  Personal
+                </span>
+              )}
             </label>
           );
         })}
       </div>
+      {hasPersonal && (
+        <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+          <ShieldAlert className="mt-px h-3.5 w-3.5 shrink-0" />
+          <span>
+            Columns marked Personal are personal data under the Data Privacy Act (RA 10173). Include them only when
+            this report needs them.
+          </span>
+        </p>
+      )}
     </fieldset>
   );
 }

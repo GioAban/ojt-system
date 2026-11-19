@@ -3,9 +3,10 @@
 
 import { bandFor } from "@/lib/evaluationForm";
 import { formatGender, formatLongDate, formatStudentName } from "@/lib/hteReport";
+import { displayOf } from "@/lib/reportDisplay";
 import {
-  DEFAULT_PAGE_SETTINGS,
-  type ListContent, type ListRow, type ListTemplate, type ReportSource, type ReportStudent, type TrackingStatus,
+  DEFAULT_DISPLAY, DEFAULT_PAGE_SETTINGS,
+  type ListContent, type ListGroupBy, type PageSettings, type ListRow, type ListTemplate, type ReportSource, type ReportStudent, type TrackingStatus,
 } from "@/types/reports";
 
 export interface ListColumn {
@@ -46,10 +47,23 @@ const COL: Record<string, ListColumn> = {
   final: { key: "final", label: "FINAL", weight: 14, center: true },
   finalScore: { key: "finalScore", label: "FINAL SCORE (%)", weight: 10, center: true, kind: "number" },
   finalBand: { key: "finalBand", label: "FINAL BAND", weight: 12, center: true },
+  // Personal na datos (Data Privacy Act): nakatago sa simula, isama lang kapag kailangan
+  contact: { key: "contact", label: "CONTACT NO.", weight: 13, center: true },
+  email: { key: "email", label: "EMAIL", weight: 20 },
+  birthday: { key: "birthday", label: "BIRTHDAY", weight: 13, center: true, kind: "date" },
+  address: { key: "address", label: "ADDRESS", weight: 22 },
+  parent: { key: "parent", label: "PARENT", weight: 16 },
+  guardian: { key: "guardian", label: "GUARDIAN", weight: 16 },
 };
 
+/** Mga column na personal na datos (may paalala sa pagpili ng column) */
+export const PERSONAL_COLUMNS = ["contact", "email", "birthday", "address", "parent", "guardian"];
+
 /** Laging kasama sa picker ng bawat listahan */
-const COMMON = ["name", "studentNumber", "section", "program", "year", "gender", "company", "department", "supervisor", "supervisorPosition", "status"];
+const COMMON = [
+  "name", "studentNumber", "section", "program", "year", "gender", "company", "department", "supervisor", "supervisorPosition", "status",
+  ...PERSONAL_COLUMNS,
+];
 
 interface TemplateDef {
   title: string;
@@ -68,10 +82,11 @@ const isDeployed = (status: string) => {
   return s === "deployed" || s === "completed";
 };
 
-/** "N/A" na department: walang department talaga, kaya blangko */
+/** Department ng student: "N/A" kapag walang department ang company; blangko kung walang company ang student */
 const cleanDepartment = (name: string | undefined) => {
-  const v = (name ?? "").trim();
-  return v.toUpperCase() === "N/A" ? "" : v;
+  if (name === undefined) return "";
+  const v = name.trim();
+  return !v || v.toUpperCase() === "N/A" ? "N/A" : v;
 };
 
 /** Mga karaniwang cell ng isang student (lahat ng template) */
@@ -93,6 +108,12 @@ function studentCells(source: ReportSource) {
       supervisor: d?.supervisor ?? "",
       supervisorPosition: d?.supervisorPosition ?? "",
       status: s.status || "For Approval",
+      contact: s.contact ?? "",
+      email: s.email ?? "",
+      birthday: formatLongDate(s.birthday ?? ""),
+      address: s.address ?? "",
+      parent: s.parent ?? "",
+      guardian: s.guardian ?? "",
     };
   };
 }
@@ -121,7 +142,7 @@ export function evaluationResult(status: TrackingStatus, open: boolean, started:
   }
 }
 
-const REQUIREMENT_TYPE: Record<string, string> = { initial: "Initial", pre: "Pre-Deployment", post: "Post-Deployment" };
+export const REQUIREMENT_TYPE: Record<string, string> = { initial: "Initial", pre: "Pre-Deployment", post: "Post-Deployment" };
 
 const TEMPLATES: Record<ListTemplate, TemplateDef> = {
   "list-students": {
@@ -263,6 +284,33 @@ export const templateColumns = (t: ListTemplate): ListColumn[] => columnKeys(t).
 
 export const templateFilters = (t: ListTemplate): ListColumn[] => TEMPLATES[t].filters.map((k) => COL[k]);
 
+/** Ang mga napiling column sa ayos na pinili ng coordinator (ang ayos ng c.columns) */
+export function orderedColumns(c: Pick<ListContent, "template" | "columns">): ListColumn[] {
+  const known = new Set(columnKeys(c.template));
+  return c.columns.filter((k) => known.has(k)).map((k) => COL[k]);
+}
+
+/** Default ng papel ng mga listahan */
+export const LIST_PAGE_DEFAULTS: PageSettings = { ...DEFAULT_PAGE_SETTINGS, orientation: "portrait", margins: "narrow" };
+
+export const GROUP_BY_OPTIONS: { value: ListGroupBy; label: string }[] = [
+  { value: "template", label: "This list's default" },
+  { value: "none", label: "None" },
+  { value: "company", label: "Company" },
+  { value: "section", label: "Section" },
+  { value: "status", label: "Status" },
+];
+
+/** Ano ang default na pangkat ng isang uri ng listahan (para sa label sa sidebar) */
+export function templateGroupingLabel(t: ListTemplate): string {
+  switch (t) {
+    case "list-per-hte": return "by company";
+    case "list-deployment": return "by deployment";
+    case "list-requirements": return "by requirement";
+    default: return "none";
+  }
+}
+
 export const buildListRows = (t: ListTemplate, source: ReportSource): ListRow[] => TEMPLATES[t].build(source);
 
 /** Ang mga setting ng builder na ibinabalik ng "Reset" */
@@ -277,7 +325,11 @@ export function buildListContent(t: ListTemplate, source: ReportSource): ListCon
     rows: buildListRows(t, source),
     overrides: {},
     generatedAt: Date.now(),
-    settings: { ...DEFAULT_PAGE_SETTINGS, orientation: "portrait", margins: "narrow" },
+    settings: { ...LIST_PAGE_DEFAULTS },
+    pending: {},
+    subtitle: "",
+    groupBy: "template",
+    display: { ...DEFAULT_DISPLAY },
   };
 }
 
@@ -299,6 +351,11 @@ export function parseListContent(raw: unknown): ListContent | null {
     overrides: c.overrides && typeof c.overrides === "object" ? c.overrides : {},
     generatedAt: typeof c.generatedAt === "number" ? c.generatedAt : 0,
     settings: { ...DEFAULT_PAGE_SETTINGS, ...(c.settings ?? {}) },
+    pending: c.pending && typeof c.pending === "object" ? c.pending : {},
+    // Bago sa sidebar: wala sa mga lumang kopya, kaya default
+    subtitle: typeof c.subtitle === "string" ? c.subtitle : "",
+    groupBy: GROUP_BY_OPTIONS.some((o) => o.value === c.groupBy) ? (c.groupBy as ListGroupBy) : "template",
+    display: displayOf(c.display),
   };
 }
 
@@ -331,23 +388,35 @@ export function visibleUnits(c: ListContent): ListUnit[] {
     return v === NONE ? !value : value === v;
   }));
   const dir = c.sort.dir === "asc" ? 1 : -1;
+  // Pangkat: ang sariling pangkat ng listahan, wala, o ayon sa company, section o status
+  const blankGroup: Record<string, string> = { company: "No HTE yet", section: "No section", status: "No status" };
+  const by = c.groupBy ?? "template";
+  const groupOf = (r: ListRow): { group: string; order: number } => {
+    if (by === "template") return { group: r.group, order: r.groupOrder };
+    if (by === "none") return { group: "", order: 0 };
+    const v = cellOf(c, r, by);
+    return v ? { group: v, order: 0 } : { group: blankGroup[by], order: 1 };
+  };
+  const grouped = new Map(rows.map((r) => [r.id, groupOf(r)]));
+  const g = (r: ListRow) => grouped.get(r.id) as { group: string; order: number };
   const sorted = [...rows].sort((a, b) =>
-    a.groupOrder - b.groupOrder
-    || a.group.localeCompare(b.group)
+    g(a).order - g(b).order
+    || g(a).group.localeCompare(g(b).group)
     || dir * cellOf(c, a, c.sort.key).localeCompare(cellOf(c, b, c.sort.key), undefined, { numeric: true })
     || cellOf(c, a, "name").localeCompare(cellOf(c, b, "name")));
 
   const counts = new Map<string, number>();
-  for (const r of sorted) counts.set(r.group, (counts.get(r.group) ?? 0) + 1);
+  for (const r of sorted) counts.set(g(r).group, (counts.get(g(r).group) ?? 0) + 1);
 
   const units: ListUnit[] = [];
   let group: string | null = null;
   let number = 0;
   sorted.forEach((row) => {
-    if (row.group !== group) {
-      group = row.group;
+    const label = g(row).group;
+    if (label !== group) {
+      group = label;
       number = 0;
-      if (row.group) units.push({ kind: "group", key: `g:${row.group}`, label: row.group, count: counts.get(row.group) ?? 0 });
+      if (label) units.push({ kind: "group", key: `g:${label}`, label, count: counts.get(label) ?? 0 });
     }
     units.push({ kind: "row", key: row.id, row, number: ++number });
   });

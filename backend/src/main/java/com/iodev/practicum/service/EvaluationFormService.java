@@ -216,7 +216,7 @@ public class EvaluationFormService {
                         ? null : s.getCoordinator().getProgram().getName(),
                 d == null || d.getCompany() == null ? null : d.getCompany().getName(),
                 d == null || d.getCompany() == null ? null : d.getCompany().getAddress(),
-                d == null ? null : d.getName(),
+                d == null ? null : SupervisorResolver.departmentLabel(d.getName()),
                 s.getSemester() == null ? null : s.getSemester().getSemester());
     }
 

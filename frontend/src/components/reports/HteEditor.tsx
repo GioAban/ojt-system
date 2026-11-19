@@ -4,17 +4,21 @@ import {
 } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useSignatoryControls } from "@/hooks/useSignatoryControls";
+import { useEditSession } from "@/hooks/useEditSession";
 import { useReportDraft } from "@/hooks/useReportDraft";
 import { useSignatories } from "@/hooks/useSignatories";
 import { useUndoRedo } from "@/hooks/useUndoRedo";
 import {
-  addMissingStudents, backfillDepartments, buildGroups, buildHteContent, missingStudents, moveStudentsToLive, newId,
+  addMissingStudents, backfillDepartments, buildGroups, buildHteContent, hteAfterCommit, missingStudents, newId,
   parseHteContent,
 } from "@/lib/hteReport";
 import { HTE_COLUMNS, applyCell, hteCells, hteColumnsOf, hteLiveIndex, signatoryOf } from "@/lib/hteCells";
+import { builtInAsSignatories } from "@/lib/manualSignatories";
 import { paperSize } from "@/lib/paperExport";
 import { downloadExcel, hteExcel } from "@/lib/reportExcel";
-import { hteApplyBlock, hteApplyItems, type ApplyItem } from "@/lib/reportWriteBack";
+import { hteCellSpec } from "@/lib/reportFields";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HteSheet, type HteEditBindings } from "@/components/reports/HteSheet";
@@ -24,9 +28,15 @@ import { EditorToolbar } from "@/components/reports/editor/EditorToolbar";
 import { PaperSurface, MAX_ZOOM, MIN_ZOOM, type Zoom } from "@/components/reports/editor/PaperSurface";
 import { RowControls, type RowAction } from "@/components/reports/editor/RowControls";
 import { CellSheet } from "@/components/reports/editor/CellSheet";
-import { ApplyToSystemDialog } from "@/components/reports/editor/ApplyToSystemDialog";
 import { CellActions, CellActionsBar, type CellInfo } from "@/components/reports/editor/CellActions";
-import { ColumnPickerButton } from "@/components/reports/editor/ColumnPicker";
+import {
+  AdvancedControl, ColumnsControl, FixedInfo, PageControl, ReportSettingsLayout, SelectField, SettingsSection,
+  SignatoriesControl, TextAreaField, TextField,
+} from "@/components/reports/settings/ReportSettingsSidebar";
+import { DEFAULT_HTE_COLUMNS } from "@/lib/hteCells";
+import { HTE_FILTERS, HTE_PAGE_DEFAULTS, hteFilterOptions, visibleHte } from "@/lib/hteReport";
+import { DEFAULT_DISPLAY, type HteStudentSort } from "@/types/reports";
+import { displayOf } from "@/lib/reportDisplay";
 import { EDIT_CSS } from "@/components/reports/editor/editCss";
 import { ReportHeader, ReportLoadState } from "@/components/reports/editor/ReportHeader";
 import { type TextControl } from "@/components/reports/editor/EditableText";
@@ -98,7 +108,7 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
     build: buildHteContent,
     parse: parseHteContent,
   });
-  const { content, source, update, get, status, loadError, retry, gone, title, setTitle, saveNow, replaceSource } = draft;
+  const { content, source, update, get, status, loadError, retry, gone, title, setTitle, replaceSource } = draft;
   const sig = useSignatories(source?.context ?? null);
   const history = useUndoRedo<Snapshot>();
   const touch = useIsMobile();
@@ -110,9 +120,11 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
   const [sheetCell, setSheetCell] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [editMode, setEditMode] = useState(false);
+  // Pirmahan sa dulo: naka-save sa device lang; pumapalit sa built-in kapag mayroon
+  const sign = useSignatoryControls(reportId, { hasBuiltIn: true, title: title || TITLES[variant].title });
+  // Sidebar ng mga setting: bukas sa desktop, sarado (bottom sheet) sa telepono
+  const [settingsOpen, setSettingsOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 768);
   const [currentCell, setCurrentCell] = useState<string | null>(null);
-  const [applying, setApplying] = useState<ApplyItem[] | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const active = useRef<ActiveCell | null>(null);
@@ -145,14 +157,8 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
 
   const onText = (id: string, value: string) => {
     if (!ctx) return;
-    const s = signatoryOf(id);
-    if (s) {
-      const cur = get();
-      if (!cur) return;
-      history.record({ content: cur, sig: sig.getSaved() }, id);
-      sig.set(s.role, s.field, value);
-      return;
-    }
+    // Ang pirmahan ay dumadaan sa "Save changes to database", hindi diretsong isine-save
+    if (signatoryOf(id)) return;
     mutate((c) => applyCell(c, id, value, variant, ctx), id);
   };
 
@@ -161,9 +167,29 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
     if (el && el.isContentEditable && el.closest("[data-editor-root]")) el.blur();
   };
 
+  // Edit mode (R6): ang mga cell na nakakabit sa tunay na record ay naghihintay hanggang patayin at kumpirmahin
+  const session = useEditSession<HteContent>({
+    reportId,
+    source,
+    get,
+    mutate,
+    onCommitted: (fresh, changes) => {
+      replaceSource(fresh);
+      mutate((cur) => hteAfterCommit(cur, fresh, changes));
+      if (changes.some((x) => x.target === "signatory")) void sig.refresh();
+    },
+    onEditMode: () => {
+      flushTyping();
+      setActiveRow(null);
+      setCurrentCell(null);
+      setSheetCell(null);
+    },
+  });
+  const editMode = session.editMode;
+  const manual = { items: sign.items, showBuiltIn: sign.showBuiltIn };
+
   const apply = (s: Snapshot) => {
     update(s.content);
-    if (JSON.stringify(s.sig) !== JSON.stringify(sig.getSaved())) sig.replace(s.sig);
   };
   const undo = () => {
     flushTyping();
@@ -439,58 +465,50 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
   const missing = editMode ? missingStudents(c, source) : [];
   const live = hteLiveIndex(c, source, variant);
   const cols = hteColumnsOf(c);
-  const liveDepartments = new Map<number, string>();
-  for (const g of c.groups) {
-    for (const s of g.students) {
-      if (s.studentId !== null) liveDepartments.set(s.studentId, live.get(`s:${s.id}:department`) ?? "");
-    }
-  }
-  const applyable = editMode && cols.includes("department") ? hteApplyItems(c, source, liveDepartments) : [];
   const valueOf = new Map(cells.map((x) => [x.id, x.value]));
   const isEdited = (id: string) => live.has(id) && valueOf.has(id) && live.get(id) !== valueOf.get(id);
-
-  const cellInfo = (id: string | null): CellInfo | null => {
-    if (!id || !valueOf.has(id)) return null;
-    const m = /^s:([^:]+):department$/.exec(id);
-    const student = m ? c.groups.flatMap((g) => g.students).find((s) => s.id === m[1]) : undefined;
-    const block = student ? hteApplyBlock(source, student.studentId) : null;
-    return {
-      label: labels.get(id) ?? "Text",
-      value: valueOf.get(id) ?? "",
-      live: live.get(id) ?? null,
-      canApply: student !== undefined && block === null,
-      applyNote: block ?? undefined,
-    };
+  /** Teksto sa papel na binago: itinatala rin para sa buod ng Edit mode (sa report lang ito) */
+  const onTextNoted = (id: string, value: string) => {
+    onText(id, value);
+    session.noteReportOnly({ key: `hte:${id}`, label: labels.get(id) ?? "Text", who: "", system: live.get(id) ?? null, value });
   };
-
+  const typed = (id: string) =>
+    hteCellSpec(c, id, source, variant, labels.get(id) ?? "Text", valueOf.get(id) ?? "", live.get(id) ?? null, (v) => onText(id, v));
+  const cellInfo = (id: string | null): CellInfo | null => {
+    if (!id || !valueOf.has(id) || typed(id) !== null) return null;
+    return { label: labels.get(id) ?? "Text", value: valueOf.get(id) ?? "", live: live.get(id) ?? null };
+  };
   const resetCell = (id: string) => {
     const value = live.get(id);
-    if (value !== undefined) onText(id, value);
-  };
-  const applyCellToSystem = (id: string) => {
-    const m = /^s:([^:]+):department$/.exec(id);
-    if (!m) return;
-    const items = hteApplyItems(c, source, liveDepartments, m[1]);
-    if (items.length > 0) setApplying(items);
-  };
-
-  const toggleColumn = (key: string, on: boolean) => {
-    mutate((cur) => {
-      const next = on ? [...hteColumnsOf(cur), key] : hteColumnsOf(cur).filter((k) => k !== key);
-      const updated = { ...cur, columns: next };
-      return key === "department" && on ? backfillDepartments(updated, source) : updated;
-    });
+    if (value !== undefined) onTextNoted(id, value);
   };
   const current = editMode && !touch ? cellInfo(currentCell) : null;
+  // Ang bottom sheet at Tab ay para sa teksto ng report lang; ang mga cell ng record ay may sariling input
+  const textCells = cells.filter((x) => typed(x.id) === null);
+
+  const shownContent = visibleHte(c, source);
+  const filterOptions = hteFilterOptions(source);
+  const display = displayOf(c.display);
+  /** Bagong napiling column (sa ayos); pinupunan ang department ng mga lumang kopya kapag unang ipinakita */
+  const setColumns = (next: string[]) =>
+    mutate((cur) => {
+      const updated = { ...cur, columns: next };
+      return next.includes("department") && !hteColumnsOf(cur).includes("department") ? backfillDepartments(updated, source) : updated;
+    }, "columns");
   const paperWidth = paperSize(c.settings.orientation, c.settings.paper).width;
 
   const bindings: HteEditBindings = {
-    onText,
+    onText: onTextNoted,
     onBulletKey,
     labelOf: (id) => labels.get(id) ?? "Text",
     isEdited,
     selectedRow: activeRow?.kind === "student" ? activeRow.studentId : null,
     pin,
+    typed,
+    pending: session.pending,
+    problems: session.problems,
+    saved: session.saved,
+    onOpen: session.setOpenSpec,
   };
 
   const pickRow = (e: PointerEvent<HTMLDivElement>) => {
@@ -554,7 +572,7 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
   return (
     <div ref={rootRef} data-editor-root className="min-w-0">
       <style>{EDIT_CSS}</style>
-      <ReportHeader title={title} onTitle={setTitle} typeLabel={meta.title} semesterName={ctx.semesterName} />
+      <ReportHeader title={title} typeLabel={meta.title} semesterName={ctx.semesterName} />
 
       <EditorToolbar
         canUndo={history.canUndo}
@@ -566,30 +584,14 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
         onFit={() => setZoom("fit")}
         onActual={() => setZoom(1)}
         status={status}
-        onSave={() => { flushTyping(); void saveNow(); }}
         editMode={editMode}
-        onEditMode={(on) => {
-          flushTyping();
-          setEditMode(on);
-          setActiveRow(null);
-          setCurrentCell(null);
-          setSheetCell(null);
-        }}
-        applyCount={applyable.length}
-        onApplyAll={() => { flushTyping(); setApplying(applyable); }}
-        extra={
-          <ColumnPickerButton
-            groups={[{
-              legend: null,
-              columns: HTE_COLUMNS.map((x) => ({ key: x.key, label: x.label })),
-              selected: cols,
-              required: ["name"],
-              onToggle: toggleColumn,
-            }]}
-          />
-        }
-        settings={c.settings}
-        onSettings={(settings) => mutate((cur) => ({ ...cur, settings }), "settings")}
+        onEditMode={session.requestEditMode}
+        pendingCount={session.count}
+        onSaveToDatabase={() => { flushTyping(); session.openSave(); }}
+        onDiscardChanges={session.requestDiscard}
+        reportOnlyCount={session.reportOnlyCount}
+        settingsOpen={settingsOpen}
+        onToggleSettings={() => setSettingsOpen((o) => !o)}
         missingCount={missing.length}
         onAddMissing={() => {
           mutate((cur) => addMissingStudents(cur, source));
@@ -600,15 +602,101 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
         onPreview={() => { flushTyping(); setShowPreview(true); }}
       />
 
+      {session.count > 0 && !editMode && (
+        <Alert className="mb-3">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            {session.count} {session.count === 1 ? "change" : "changes"} to real records from your last edit session {session.count === 1 ? "isn't" : "aren't"} saved to the database yet.
+            <span className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={session.requestDiscard}>Discard</Button>
+              <Button size="sm" onClick={session.openSave}>Save changes to database</Button>
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <p className="mb-2 text-xs text-muted-foreground">
         {!editMode
           ? "This report is read-only. Turn on Edit mode to change it."
           : touch
-            ? "Tap any text on the paper to edit it. Tap a row for its actions. Pinch to zoom. Edits get a small dot."
-            : "Click any text on the paper and type. Point at a row or a company for its controls. Edits change this report only and get a small dot."}
+            ? "Tap text on the paper to edit it. Tap a row for its actions. Company names, departments and training dates are written to the real records with Save changes to database. Other text changes this report only and can be reset."
+            : "Click text on the paper to edit it. Point at a row or a company for its controls. Company names, departments and training dates are written to the real records with Save changes to database. Other text changes this report only and can be reset."}
         {variant === "list" && " The Period of Training column stays empty in this list."}
       </p>
 
+      <ReportSettingsLayout
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        sidebar={
+          <>
+            <SettingsSection title="Report" onReset={() => mutate((cur) => ({ ...cur, subtitle: "", headerText: "", footerText: "" }))}>
+              <TextField label="Title" value={title} onChange={setTitle} placeholder={meta.title} />
+              <TextField label="Subtitle" value={c.subtitle ?? ""} onChange={(v) => mutate((cur) => ({ ...cur, subtitle: v }), "subtitle")} />
+              <TextAreaField label="Header text" value={c.headerText ?? ""} placeholder="Printed above the table"
+                onChange={(v) => mutate((cur) => ({ ...cur, headerText: v }), "header")} />
+              <TextAreaField label="Footer text" value={c.footerText ?? ""} placeholder="Printed after the table, on the last page"
+                onChange={(v) => mutate((cur) => ({ ...cur, footerText: v }), "footer")} />
+              <p className="text-xs text-muted-foreground">The title lines, HEI, address and degree program are edited on the paper.</p>
+            </SettingsSection>
+
+            <SettingsSection title="Data and filters" onReset={() => mutate((cur) => ({ ...cur, filters: {} }))}>
+              <FixedInfo items={[
+                { label: "Semester", value: ctx.semesterName },
+                { label: "Course", value: ctx.programAbbreviation || ctx.programName },
+              ]} />
+              {HTE_FILTERS.map((f) => (
+                <SelectField
+                  key={f.key}
+                  label={f.label}
+                  value={c.filters?.[f.key] ?? ""}
+                  options={[{ value: "", label: "All" }, ...(filterOptions[f.key] ?? [])]}
+                  onChange={(v) => mutate((cur) => {
+                    const filters = { ...(cur.filters ?? {}) };
+                    if (v) filters[f.key] = v;
+                    else delete filters[f.key];
+                    return { ...cur, filters };
+                  })}
+                />
+              ))}
+              <p className="text-xs text-muted-foreground">Filters apply to students from the system. Rows you added always show.</p>
+            </SettingsSection>
+
+            <SettingsSection title="Columns" count={cols.length} onReset={() => setColumns([...DEFAULT_HTE_COLUMNS])}>
+              <ColumnsControl groups={[{
+                columns: HTE_COLUMNS.map((x) => ({ key: x.key, label: x.label })),
+                selected: cols,
+                required: ["name"],
+                pinned: ["company"],
+                onChange: setColumns,
+              }]} />
+            </SettingsSection>
+
+            <SettingsSection title="Sorting and grouping" onReset={() => mutate((cur) => ({ ...cur, studentSort: "manual" }))}>
+              <SelectField label="Students in each company" value={c.studentSort ?? "manual"}
+                options={[
+                  { value: "manual", label: "As arranged on the paper" },
+                  { value: "asc", label: "Name, A to Z" },
+                  { value: "desc", label: "Name, Z to A" },
+                ]}
+                onChange={(v) => mutate((cur) => ({ ...cur, studentSort: v as HteStudentSort }))} />
+              <p className="text-xs text-muted-foreground">Students are grouped by host training establishment.</p>
+            </SettingsSection>
+
+            <SettingsSection title="Page" onReset={() => mutate((cur) => ({ ...cur, settings: { ...HTE_PAGE_DEFAULTS } }), "settings")}>
+              <PageControl settings={c.settings} onChange={(settings) => mutate((cur) => ({ ...cur, settings }), "settings")} />
+            </SettingsSection>
+
+            <SettingsSection title="Signatories" count={sign.items.length}>
+              <SignatoriesControl items={sign.items} onAdd={sign.add} onEdit={sign.edit} onDelete={sign.remove} onManage={sign.manage}
+                builtIn={{ checked: sign.showBuiltIn, onChange: sign.setShowBuiltIn }} />
+            </SettingsSection>
+
+            <SettingsSection title="Advanced" defaultOpen={false} onReset={() => mutate((cur) => ({ ...cur, display: { ...DEFAULT_DISPLAY } }))}>
+              <AdvancedControl display={display} onChange={(next) => mutate((cur) => ({ ...cur, display: next }))}
+                show={{ rowNumbers: true, striped: true, dateFormat: variant === "report", blank: true }} />
+            </SettingsSection>
+          </>
+        }
+      >
       <EditorContext.Provider value={api}>
         <PaperSurface
           paperWidth={paperWidth}
@@ -642,20 +730,24 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
             onPointerDown={touch && editMode ? pickRow : undefined}
           >
             <HteSheet
-              content={c}
+              content={shownContent}
               context={ctx}
               variant={variant}
               signatories={people}
               mode={editMode ? "edit" : "preview"}
               edit={editMode ? bindings : undefined}
+              manual={{
+                ...manual,
+                onAdd: sign.add,
+                ...(editMode ? { onEdit: sign.edit, onDelete: sign.remove } : {}),
+              }}
             />
           </div>
         </PaperSurface>
       </EditorContext.Provider>
+      </ReportSettingsLayout>
 
-      {current && currentCell && (
-        <CellActionsBar info={current} onReset={() => resetCell(currentCell)} onApply={() => applyCellToSystem(currentCell)} />
-      )}
+      {current && currentCell && <CellActionsBar info={current} onReset={() => resetCell(currentCell)} />}
       {editMode && (
         <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addGroup}>
           <Plus className="h-4 w-4" /> Add a company group
@@ -665,10 +757,10 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
       {touch && editMode && activeRow && <div className="h-28" aria-hidden />}
 
       <CellSheet
-        cells={cells}
+        cells={textCells}
         openId={sheetCell}
         onClose={() => setSheetCell(null)}
-        onCommit={onText}
+        onCommit={onTextNoted}
         onNavigate={(id) => {
           setSheetCell(id);
           const row = rowFromCellId(c, id);
@@ -677,29 +769,13 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
         }}
         renderExtra={(cell) => {
           const state = cellInfo(cell.id);
-          return state && (
-            <CellActions
-              info={state}
-              onReset={() => { resetCell(cell.id); setSheetCell(null); }}
-              onApply={() => { applyCellToSystem(cell.id); setSheetCell(null); }}
-            />
-          );
+          return state && <CellActions info={state} onReset={() => { resetCell(cell.id); setSheetCell(null); }} />;
         }}
       />
 
-      {applying && (
-        <ApplyToSystemDialog
-          reportId={reportId}
-          items={applying}
-          source={source}
-          onClose={() => setApplying(null)}
-          onApplied={(fresh, items) => {
-            setApplying(null);
-            replaceSource(fresh);
-            mutate((cur) => moveStudentsToLive(cur, items.map((i) => i.id), fresh));
-          }}
-        />
-      )}
+      {session.dialogs}
+
+      {sign.panel}
 
       <ReportPreviewDialog
         open={showPreview}
@@ -708,9 +784,9 @@ export function HteEditor({ variant, reportId }: { variant: HteVariant; reportId
         fileName={`${meta.file}-${(ctx.semesterName || "semester").replace(/[^\w-]+/g, "-")}.pdf`}
         settings={c.settings}
         onSettings={(settings) => mutate((cur) => ({ ...cur, settings }), "settings")}
-        onExcel={() => downloadExcel(hteExcel(c, title || meta.title, ctx, variant))}
+        onExcel={() => downloadExcel({ ...hteExcel(shownContent, title || meta.title, ctx, variant), signatories: manual.items.length === 0 ? [] : manual.showBuiltIn ? [...builtInAsSignatories(people), ...manual.items] : manual.items })}
         renderSheet={(mode) => (
-          <HteSheet content={c} context={ctx} variant={variant} signatories={people} mode={mode} />
+          <HteSheet content={shownContent} context={ctx} variant={variant} signatories={people} mode={mode} manual={manual} />
         )}
       />
 
@@ -764,7 +840,7 @@ function HteRowControls(p: HteRowControlsProps) {
         targetSelector={`tr[data-unit-key="${CSS.escape(s.id)}"]`}
         label={s.name || `Row ${si + 1}`}
         actions={actions}
-        moveTargets={c.groups.filter((g) => g.id !== group.id).map((g) => ({
+        moveTargets={s.studentId !== null ? undefined : c.groups.filter((g) => g.id !== group.id).map((g) => ({
           id: g.id, label: g.noHte ? "No HTE yet" : g.name || "Unnamed company",
         }))}
         onMove={(gid) => p.onMoveStudentTo(s.id, gid)}

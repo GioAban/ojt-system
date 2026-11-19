@@ -21,14 +21,13 @@ import com.iodev.practicum.repository.SignedDtrRepository;
 import com.iodev.practicum.repository.SignedWeeklyReportRepository;
 import com.iodev.practicum.repository.StudentDepartmentHistoryRepository;
 import com.iodev.practicum.repository.StudentRepository;
-import com.iodev.practicum.service.StudentNotifier;
+import com.iodev.practicum.service.EvaluationAccessService;
+import com.iodev.practicum.service.StudentStatusService;
 import com.iodev.practicum.util.EvaluationAccess;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -87,7 +86,8 @@ public class BulkController {
     @Autowired private SignedWeeklyReportRepository signedWeeklyRepository;
     @Autowired private MonthlyDtrRepository dtrRepository;
     @Autowired private SignedDtrRepository signedDtrRepository;
-    @Autowired private StudentNotifier studentNotifier;
+    @Autowired private StudentStatusService studentStatusService;
+    @Autowired private EvaluationAccessService evaluationAccessService;
 
     // ---------------------------------------------------------------------
     // Mga helper
@@ -207,43 +207,19 @@ public class BulkController {
 
     private BulkResult applyAccess(Long coordinatorId, Long semesterId, String key, boolean open,
                                    List<Student> students, Tally tally) {
+        // Nasa EvaluationAccessService ang tuntunin at ang abiso (iisa para sa bulk at sa mga report)
         List<Student> changed = new ArrayList<>();
         for (Student s : students) {
-            if (!semesterId.equals(s.getSemester().getId())) {
-                tally.skip("belong to a different semester");
-            } else if (Boolean.TRUE.equals(s.getIsArchived())) {
-                tally.skip("are archived");
-            } else if (EvaluationAccess.isOpen(s, key) == open) {
-                tally.skip(open ? "were already open" : "were already closed");
+            String reason = evaluationAccessService.skipReason(s, semesterId, key, open);
+            if (reason != null) {
+                tally.skip(reason);
             } else {
-                EvaluationAccess.setOpen(s, key, open);
                 changed.add(s);
                 tally.ok();
             }
         }
-        studentRepository.saveAll(changed);
-        if (open) notifyOpened(coordinatorId, semesterId, key, changed);
+        evaluationAccessService.apply(coordinatorId, semesterId, key, open, changed);
         return tally.done();
-    }
-
-    /** Pagkatapos ma-commit lang, at ang pagpalya ay hindi dapat makapigil sa pagbukas */
-    private void notifyOpened(Long coordinatorId, Long semesterId, String key, List<Student> opened) {
-        if (opened.isEmpty()) return;
-        DocumentRequirement requirement = requirementRepository.findBuiltIn(coordinatorId, semesterId, key).orElse(null);
-        if (requirement == null) return;
-
-        List<Long> ids = opened.stream().map(Student::getId).toList();
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                try {
-                    studentNotifier.evaluationOpened(requirement, ids);
-                } catch (RuntimeException e) {
-                    org.slf4j.LoggerFactory.getLogger(BulkController.class)
-                            .warn("Couldn't save the evaluation notifications", e);
-                }
-            }
-        });
     }
 
     // ---------------------------------------------------------------------
@@ -331,12 +307,7 @@ public class BulkController {
     public ResponseEntity<?> placementStatus(@RequestBody BulkPlacementRequest request, Authentication authentication) {
         if (request == null) return bad("Request body is required.");
 
-        String key = upper(request.status());
-        String stored = switch (key) {
-            case "FOR_APPROVAL" -> "For Approval";
-            case "APPROVED" -> "Approved";
-            default -> null;
-        };
+        String stored = StudentStatusService.storedPlacement(upper(request.status()));
         if (stored == null) {
             return bad("Use Assign company to deploy students. Status must be FOR_APPROVAL or APPROVED.");
         }
@@ -346,12 +317,12 @@ public class BulkController {
 
         Tally tally = new Tally(scope.foreign());
         for (Student s : scope.students()) {
-            if ("Completed".equalsIgnoreCase(s.getStatus())) {
-                tally.skip("have completed the OJT");
-            } else if (s.getDepartment() != null) {
-                tally.skip("are placed in a company (remove them first)");
+            // Nasa StudentStatusService ang tuntunin (iisa para sa bulk at sa mga report)
+            String reason = studentStatusService.placementSkipReason(s);
+            if (reason != null) {
+                tally.skip(reason);
             } else {
-                s.setStatus(stored);
+                studentStatusService.setPlacement(s, stored);
                 tally.ok();
             }
         }
@@ -396,7 +367,8 @@ public class BulkController {
         if (scope.error() != null) return scope.error();
 
         Department department = departmentRepository.findById(request.departmentId()).orElse(null);
-        if (department == null) return bad("Selected department was not found.");
+        // Ang hiling mula sa company link na hindi pa approved ay hindi puwedeng pagtalagahan
+        if (department == null || department.getCompany().isHiddenRequest()) return bad("Selected department was not found.");
 
         Company company = department.getCompany();
         if (!company.getCoordinator().getId().equals(scope.coordinator().getId())) {
