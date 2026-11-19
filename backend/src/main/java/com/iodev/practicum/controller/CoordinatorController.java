@@ -8,10 +8,10 @@ import com.iodev.practicum.model.Program;
 import com.iodev.practicum.model.Role;
 import com.iodev.practicum.model.User;
 import com.iodev.practicum.repository.CoordinatorRepository;
-import com.iodev.practicum.repository.DirectorRepository;
 import com.iodev.practicum.repository.ProgramRepository;
 import com.iodev.practicum.repository.StudentRepository;
 import com.iodev.practicum.repository.UserRepository;
+import com.iodev.practicum.service.AccountEmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
@@ -38,7 +38,7 @@ public class CoordinatorController {
     private UserRepository userRepository;
 
     @Autowired
-    private DirectorRepository directorRepository;
+    private AccountEmailService accountEmails;
 
     @Autowired
     private StudentRepository studentRepository;
@@ -75,8 +75,8 @@ public class CoordinatorController {
         String email = clean(request.getEmail()).toLowerCase();
         String employeeNumber = clean(request.getEmployeeNumber());
 
-        if (emailTaken(email, null)) {
-            return ResponseEntity.status(409).body("That email is already used by another account.");
+        if (accountEmails.inUse(email, AccountEmailService.Exclude.NONE)) {
+            return ResponseEntity.status(409).body(AccountEmailService.IN_USE);
         }
         if (coordinatorRepository.existsByEmployeeNumberIgnoreCase(employeeNumber)) {
             return ResponseEntity.status(409).body("That employee number already exists.");
@@ -128,8 +128,8 @@ public class CoordinatorController {
         String email = clean(request.getEmail()).toLowerCase();
         String employeeNumber = clean(request.getEmployeeNumber());
 
-        if (emailTaken(email, user.getId())) {
-            return ResponseEntity.status(409).body("That email is already used by another account.");
+        if (accountEmails.inUse(email, AccountEmailService.Exclude.user(user.getId()))) {
+            return ResponseEntity.status(409).body(AccountEmailService.IN_USE);
         }
         if (coordinatorRepository.existsByEmployeeNumberIgnoreCaseAndIdNot(employeeNumber, id)) {
             return ResponseEntity.status(409).body("That employee number already exists.");
@@ -224,15 +224,6 @@ public class CoordinatorController {
                 p.getCollege().getAbbreviation(), c.getType().name(),
                 c.getEmployeeNumber(), c.getProfessionalTitles(),
                 u.getIsArchived(), studentsCount, c.getCreatedAt());
-    }
-
-    private boolean emailTaken(String email, Long excludeUserId) {
-        boolean userTaken = excludeUserId == null
-                ? userRepository.existsByEmail(email)
-                : userRepository.existsByEmailAndIdNot(email, excludeUserId);
-        return userTaken
-                || directorRepository.existsByEmail(email)
-                || studentRepository.existsByEmail(email);
     }
 
     private String clean(String value) {

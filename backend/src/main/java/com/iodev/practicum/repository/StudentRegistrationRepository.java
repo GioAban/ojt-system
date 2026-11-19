@@ -30,8 +30,13 @@ public interface StudentRegistrationRepository extends JpaRepository<StudentRegi
     boolean numberTaken(@Param("number") String number, @Param("semesterId") Long semesterId,
                         @Param("excludeId") Long excludeId);
 
-    @Query("select count(r) > 0 from StudentRegistration r where lower(r.email) = lower(:email) "
-            + "and r.status in ('PENDING', 'VERIFIED') and (:excludeId is null or r.id <> :excludeId)")
+    /**
+     * PENDING lang ang humaharang. Ang VERIFIED na may student_id ay ang students table na ang bahala
+     * (kaya hindi na humaharang ang lumang email kapag pinalitan o tinanggal ng coordinator ang email ng student).
+     */
+    @Query("select count(r) > 0 from StudentRegistration r where lower(trim(r.email)) = lower(:email) "
+            + "and (r.status = 'PENDING' or (r.status = 'VERIFIED' and r.studentId is null)) "
+            + "and (:excludeId is null or r.id <> :excludeId)")
     boolean emailTaken(@Param("email") String email, @Param("excludeId") Long excludeId);
 
     /** Lahat ng registration ng coordinator sa semester (lahat ng status), pinakaluma ang una */

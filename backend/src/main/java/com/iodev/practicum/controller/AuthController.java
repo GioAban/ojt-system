@@ -7,6 +7,7 @@ import com.iodev.practicum.repository.ProgramRepository;
 import com.iodev.practicum.repository.UserRepository;
 import com.iodev.practicum.security.JwtUtil;
 import com.iodev.practicum.security.LoginIdentifierResolver;
+import com.iodev.practicum.service.AccountEmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -38,11 +39,18 @@ public class AuthController {
     @Autowired
     private com.iodev.practicum.service.BuiltInRequirementService builtInRequirements;
 
+    @Autowired
+    private AccountEmailService accountEmails;
+
     @PostMapping("/register")
     @Transactional
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            return ResponseEntity.badRequest().body("Email already registered.");
+        String email = AccountEmailService.normalize(request.getEmail());
+        if (email.isEmpty()) {
+            return ResponseEntity.badRequest().body("Email is required.");
+        }
+        if (accountEmails.inUse(email, AccountEmailService.Exclude.NONE)) {
+            return ResponseEntity.status(409).body(AccountEmailService.IN_USE);
         }
 
         Program program = programRepository.findById(request.getProgramId())
@@ -54,7 +62,7 @@ public class AuthController {
 
         User user = new User();
         user.setFullname(request.getFullname());
-        user.setEmail(request.getEmail());
+        user.setEmail(email);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRoleAs(Role.COORDINATOR);
         user.setIsArchived(false);

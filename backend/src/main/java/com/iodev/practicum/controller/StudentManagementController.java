@@ -1,5 +1,6 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.AccountEmailService;
 import com.iodev.practicum.service.ActionException;
 import com.iodev.practicum.service.StudentProfileService;
 import com.iodev.practicum.service.SupervisorResolver;
@@ -42,6 +43,7 @@ public class StudentManagementController {
     @Autowired private com.iodev.practicum.repository.StudentRegistrationRepository registrations;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private StudentProfileService studentProfileService;
+    @Autowired private AccountEmailService accountEmails;
     @PersistenceContext private EntityManager em;
 
     /** Mali ang input; ginagamit sa loob ng mga validator */
@@ -206,8 +208,8 @@ public class StudentManagementController {
 
         String email = request == null || request.email() == null ? "" : request.email().trim().toLowerCase();
         if (email.isEmpty() || email.length() > 255 || !EMAIL.matcher(email).matches()) return bad("Enter a valid email.");
-        if (repository.emailExistsExcluding(email, s.getId())) {
-            return ResponseEntity.status(409).body("That email is already used by another account.");
+        if (accountEmails.inUse(email, AccountEmailService.Exclude.student(s.getId()))) {
+            return ResponseEntity.status(409).body(AccountEmailService.IN_USE);
         }
 
         String password = DefaultPassword.of(s);

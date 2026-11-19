@@ -30,8 +30,7 @@ public class RegistrationService {
 
     public static final String NUMBER_TAKEN =
             "This Student ID is already registered for this semester. If this is you, contact your coordinator.";
-    public static final String EMAIL_TAKEN =
-            "That email is already used by another account. Use a different email, or contact your coordinator.";
+    public static final String EMAIL_TAKEN = AccountEmailService.IN_USE;
 
     @Autowired private StudentProfileService profiles;
     @Autowired private StudentManagementRepository students;
@@ -39,6 +38,7 @@ public class RegistrationService {
     @Autowired private StudentNotificationRepository studentNotifications;
     @Autowired private MailService mail;
     @Autowired private EmailTokenService emailTokens;
+    @Autowired private AccountEmailService accountEmails;
 
     // ---------------------------------------------------------------------
     // Paglinis at pagsusuri
@@ -122,9 +122,9 @@ public class RegistrationService {
                 || registrations.numberTaken(number, semesterId, excludeRegistrationId);
     }
 
-    /** Ginagamit na ang email (kahit anong account ng student, o pending/verified na registration) */
+    /** Ginagamit na ang email kahit saan (users, directors, students, PENDING na registration); tingnan ang AccountEmailService */
     public boolean emailTaken(String email, Long excludeRegistrationId) {
-        return students.emailExists(email) || registrations.emailTaken(email, excludeRegistrationId);
+        return accountEmails.inUse(email, AccountEmailService.Exclude.registration(excludeRegistrationId));
     }
 
     // ---------------------------------------------------------------------
@@ -158,8 +158,7 @@ public class RegistrationService {
                     + " already exists in this semester. Fix the ID or reject this registration.");
         }
         if (emailTaken(r.getEmail(), r.getId())) {
-            throw ActionException.conflict("The email " + r.getEmail()
-                    + " is already used by another account. Reject this registration.");
+            throw ActionException.conflict(AccountEmailService.IN_USE + " Reject this registration.");
         }
 
         Student s = new Student();

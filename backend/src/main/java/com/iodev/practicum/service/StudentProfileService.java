@@ -23,6 +23,7 @@ public class StudentProfileService {
     private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     @Autowired private StudentManagementRepository repository;
+    @Autowired private AccountEmailService accountEmails;
 
     // ---------------------------------------------------------------------
     // Mga validator (ibinabalik ang nilinis na halaga o naghahagis ng ActionException 400)
@@ -207,8 +208,8 @@ public class StudentProfileService {
                     throw ActionException.conflict("Create the account first, then you can change the email.");
                 }
                 next = validEmail(raw);
-                if (repository.emailExistsExcluding(next, id)) {
-                    throw ActionException.conflict("That email is already used by another student.");
+                if (accountEmails.inUse(next, AccountEmailService.Exclude.student(id))) {
+                    throw ActionException.conflict(AccountEmailService.IN_USE);
                 }
                 set = s::setEmail;
             }
