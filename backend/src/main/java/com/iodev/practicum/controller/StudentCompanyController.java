@@ -1,6 +1,8 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.FieldErrors;
 import com.iodev.practicum.service.PrivacySettings;
+import com.iodev.practicum.service.CompanyNatures;
 import com.iodev.practicum.service.SupervisorResolver;
 import com.iodev.practicum.model.Company;
 import com.iodev.practicum.model.CompanyApplication;
@@ -80,7 +82,7 @@ public class StudentCompanyController {
     public record NewRequestBody(Long existingCompanyId, String companyName, String address, String contactNumber,
                               String location, String departmentName, String supervisorFullname,
                               String supervisorPosition, String supervisorEmail, String supervisorContactNumber,
-                              Boolean confirmDifferent, Boolean supervisorPermission) {}
+                              Boolean confirmDifferent, Boolean supervisorPermission, Boolean hasDepartments) {}
 
     // ---------------------------------------------------------------------
     // Overview
@@ -152,7 +154,7 @@ public class StudentCompanyController {
         Company c = d.getCompany();
         SupervisorResolver.Supervisor sup = SupervisorResolver.forDepartment(d);
         return ResponseEntity.ok(new MyCompany(true, status, c.getName(),
-                c.getNature() == null ? null : c.getNature().getName(),
+                CompanyNatures.label(c),
                 c.getAddress(), c.getLocation(), c.getContactNumber(), deptLabel(d.getName()),
                 sup.nameOrNull(), sup.positionOrNull(), sup.emailOrNull(),
                 sup.contactNumberOrNull()));
@@ -172,7 +174,7 @@ public class StudentCompanyController {
 
         Department d = departmentRepository.findById(body.departmentId()).orElse(null);
         if (d == null || Boolean.TRUE.equals(d.getIsArchived()) || !"approved".equalsIgnoreCase(d.getStatus())
-                || Boolean.TRUE.equals(d.getCompany().getIsArchived())) {
+                || Boolean.TRUE.equals(d.getCompany().getIsArchived()) || d.getCompany().isHiddenRequest()) {
             return ResponseEntity.status(404).body("That department isn't available.");
         }
         if (!sameOwner(s, d.getCompany())) return ResponseEntity.status(403).body("That company isn't in your list.");
@@ -279,19 +281,33 @@ public class StudentCompanyController {
         if (body == null) return bad("Missing details.");
 
         String companyName = clean(body.companyName());
-        String deptName = clean(body.departmentName());
-        if (deptName.isEmpty()) return bad("Department is required.");
-        if (deptName.length() > 255) return bad("Department name is too long.");
+        boolean newCompany = body.existingCompanyId() == null;
+        FieldErrors errors = new FieldErrors();
 
-        // Immediate supervisor: opsyonal, pero magkapares ang pangalan at posisyon
-        String supError = SupervisorResolver.validate(body.supervisorFullname(), body.supervisorPosition(),
-                body.supervisorContactNumber(), body.supervisorEmail(), "supervisor");
-        if (supError != null) return bad(supError);
+        // Bagong company na walang department: N/A ang department (gaya ng sa coordinator)
+        String deptName = newCompany && Boolean.FALSE.equals(body.hasDepartments()) ? "N/A" : clean(body.departmentName());
+        if (deptName.isEmpty()) errors.add("departmentName", "Enter the department name.");
+        else if (deptName.length() > 255) errors.add("departmentName", "Department name is too long.");
+        else if (!newCompany && SupervisorResolver.isPlaceholderDepartment(deptName)) {
+            errors.add("departmentName", "Enter the name of the department you're requesting.");
+        }
+
         boolean hasSupervisor = SupervisorResolver.anyFilled(body.supervisorFullname(), body.supervisorPosition(),
                 body.supervisorContactNumber(), body.supervisorEmail());
-        if (hasSupervisor && !Boolean.TRUE.equals(body.supervisorPermission())) {
-            return bad("Please confirm that you have the supervisor's permission to share these contact details.");
+        if (newCompany) {
+            // Bagong company: kailangan ang immediate supervisor (lahat ng detalye) at ang pahintulot
+            SupervisorResolver.requireAll(errors, "supervisor", body.supervisorFullname(), body.supervisorPosition(),
+                    body.supervisorContactNumber(), body.supervisorEmail());
+            hasSupervisor = true;
+        } else {
+            // Bagong department sa dati nang company: opsyonal ang supervisor ng department
+            SupervisorResolver.optionalPair(errors, "supervisor", body.supervisorFullname(), body.supervisorPosition(),
+                    body.supervisorContactNumber(), body.supervisorEmail());
         }
+        if (hasSupervisor && !Boolean.TRUE.equals(body.supervisorPermission())) {
+            errors.add("supervisorPermission", "Confirm that you have the supervisor's permission to share these contact details.");
+        }
+        if (!errors.isEmpty()) return errors.toResponse();
 
         if (pendingRequests(s) >= MAX_PENDING_REQUESTS) {
             return ResponseEntity.status(409).body("You already have " + MAX_PENDING_REQUESTS
@@ -301,16 +317,18 @@ public class StudentCompanyController {
         Company company;
         if (body.existingCompanyId() != null) {
             company = companyRepository.findById(body.existingCompanyId()).orElse(null);
-            if (company == null || Boolean.TRUE.equals(company.getIsArchived()) || !sameOwner(s, company)) {
+            if (company == null || Boolean.TRUE.equals(company.getIsArchived()) || company.isHiddenRequest()
+                    || !sameOwner(s, company)) {
                 return ResponseEntity.status(404).body("That company isn't in your list.");
             }
         } else {
             if (companyName.isEmpty()) return bad("Company name is required.");
             if (companyName.length() > 255) return bad("Company name is too long.");
             String address = clean(body.address());
-            String contact = clean(body.contactNumber());
+            String contact = SupervisorResolver.cleanContact(body.contactNumber());
             if (address.isEmpty()) return bad("Company address is required.");
             if (contact.isEmpty()) return bad("Company contact number is required.");
+            if (contact.length() > SupervisorResolver.CONTACT_MAX) return bad(SupervisorResolver.CONTACT_TOO_LONG);
 
             for (Company c : companyRepository.findForAssignment(coordinator.getId(), s.getSemester().getId())) {
                 boolean same = CompanyMatch.normalize(c.getName()).equals(CompanyMatch.normalize(companyName));
@@ -332,7 +350,7 @@ public class StudentCompanyController {
             // Nagagawa na ang company ngayon, kaya dala na nito ang detalye pagka-approve.
             company.setImsupFullname(SupervisorResolver.clean(body.supervisorFullname()));
             company.setImsupPosition(SupervisorResolver.clean(body.supervisorPosition()));
-            company.setImsupContactNumber(SupervisorResolver.cleanOrNull(body.supervisorContactNumber()));
+            company.setImsupContactNumber(SupervisorResolver.cleanContactOrNull(body.supervisorContactNumber()));
             String supEmail = SupervisorResolver.clean(body.supervisorEmail()).toLowerCase();
             company.setImsupEmail(supEmail.isEmpty() ? null : supEmail);
             company = companyRepository.save(company);
@@ -358,7 +376,7 @@ public class StudentCompanyController {
             d.setSupervisorPosition(SupervisorResolver.cleanOrNull(body.supervisorPosition()));
             String supEmail = SupervisorResolver.clean(body.supervisorEmail()).toLowerCase();
             d.setSupervisorEmail(supEmail.isEmpty() ? null : supEmail);
-            d.setSupervisorContactNumber(SupervisorResolver.cleanOrNull(body.supervisorContactNumber()));
+            d.setSupervisorContactNumber(SupervisorResolver.cleanContactOrNull(body.supervisorContactNumber()));
         }
         if (hasSupervisor) {
             d.setSupervisorShareConfirmedAt(java.time.LocalDateTime.now());

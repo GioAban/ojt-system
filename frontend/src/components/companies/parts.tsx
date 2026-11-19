@@ -1,11 +1,49 @@
 import type { ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import { Mail, UserRound, type LucideIcon } from "lucide-react";
 import { formatLongDate } from "@/lib/dates";
-import { isApproved, moaState } from "@/lib/company";
+import { isApproved, moaState, ownDepartmentSupervisor } from "@/lib/company";
 import { cn } from "@/lib/utils";
+import { ContactText } from "@/components/ContactText";
+import type { CompanyItem, DepartmentItem } from "@/types/company";
 import { Label } from "@/components/ui/label";
 
 const CHIP = "inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-xs font-medium";
+
+/**
+ * Supervisor ng isang department sa listahan ng company: ang sarili nito, o "Company's immediate supervisor"
+ * (kasama ang pangalan) kapag ang company ang ginagamit. Kapareho ng SupervisorResolver.
+ */
+export function DepartmentSupervisorLines({ company, d }: { company: CompanyItem; d: DepartmentItem }) {
+  const own = ownDepartmentSupervisor(company, d);
+  if (!own) {
+    return (
+      <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <UserRound className="h-3 w-3 shrink-0" />
+          {company.supervisorName
+            ? `${company.supervisorName} (company's immediate supervisor)`
+            : "Company's immediate supervisor (not set)"}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5">
+        <UserRound className="h-3 w-3 shrink-0" />
+        {own.supervisorFullname}
+        {own.supervisorPosition ? ` · ${own.supervisorPosition}` : ""}
+      </span>
+      <ContactText value={own.supervisorContactNumber} />
+      {own.supervisorEmail && (
+        <span className="inline-flex items-center gap-1.5">
+          <Mail className="h-3 w-3 shrink-0" />
+          {own.supervisorEmail}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export function ApprovalBadge({ status }: { status: string }) {
   return isApproved(status) ? (
@@ -25,6 +63,18 @@ export function ApprovalBadge({ status }: { status: string }) {
       )}
     >
       Pending
+    </span>
+  );
+}
+
+/** Kulang ang immediate supervisor ng company (luma); kailangang punan sa susunod na pag-edit */
+export function SupervisorMissingBadge() {
+  return (
+    <span
+      className={cn(CHIP, "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300")}
+      title="Edit the company to add the immediate supervisor's name, position, contact number and email."
+    >
+      Supervisor info missing
     </span>
   );
 }

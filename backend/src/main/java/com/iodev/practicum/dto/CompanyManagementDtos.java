@@ -28,17 +28,32 @@ public final class CompanyManagementDtos {
             Long natureId, String nature, String description,
             String supervisorName, String supervisorPosition,
             String supervisorContactNumber, String supervisorEmail, String idType, String idNumber,
-            boolean archived, long placed, int slots, List<DepartmentItem> departments) {}
+            boolean archived, long placed, int slots, List<DepartmentItem> departments, List<String> skills,
+            /* Paliwanag ng "Other" (para sa Edit). Ang "nature" ay ang ipinapakita: ang paliwanag kapag Other. */
+            String natureOther) {}
 
     public record NatureItem(Long id, String name) {}
 
     public record CompaniesResponse(Long semesterId, List<CompanyItem> companies, List<NatureItem> natures) {}
 
+    /**
+     * hasDepartments at departments: ang pagpili sa form ("Does this company have departments?").
+     * Kapag null ang dalawa (lumang client), hindi ginagalaw ang mga department.
+     * naSlots: slots ng N/A na department kapag walang department ang company.
+     */
     public record CompanyRequest(
             Long semesterId, String name, String address, String location, String contactNumber,
             Long natureId, String description, String supervisorName, String supervisorPosition,
             String supervisorContactNumber, String supervisorEmail,
-            String idType, String idNumber) {}
+            String idType, String idNumber,
+            Boolean hasDepartments, Integer naSlots, List<DepartmentRow> departments,
+            List<String> skills,
+            /* Kailangan kapag "Other" ang nature */
+            String natureOther) {}
+
+    /** Isang department sa company form; id = null kapag bago */
+    public record DepartmentRow(Long id, String name, Integer slots, String supervisorFullname,
+                                String supervisorPosition, String supervisorContactNumber, String supervisorEmail) {}
 
     public record DepartmentRequest(
             String name, Integer slots, String supervisorFullname, String supervisorPosition,

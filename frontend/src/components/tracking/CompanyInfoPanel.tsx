@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import api from "@/lib/api";
-import { PHONE_PATTERN } from "@/lib/company";
+import { CONTACT_MAX, contactError } from "@/lib/company";
 import { formatLongDate } from "@/lib/dates";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -66,12 +66,9 @@ function required(label: string) {
   return (value: string) => (value ? null : `${label} is required.`);
 }
 
+/** Malayang teksto (puwedeng higit sa isang numero); kailangan lang na may laman at hindi lampas sa 255 */
 function phone(value: string) {
-  if (!value) return "Contact number is required.";
-  if (!PHONE_PATTERN.test(value)) {
-    return "Use digits, spaces, +, -, or parentheses (7 to 20 characters).";
-  }
-  return null;
+  return contactError(value, true, "Contact number is required.");
 }
 
 export function CompanyInfoPanel({
@@ -171,6 +168,18 @@ export function CompanyInfoPanel({
     field: DepartmentField,
     value: string,
   ) {
+    // Ang ipinapakitang supervisor ay galing sa company (walang sariling supervisor ang department, o N/A):
+    // ang immediate supervisor ng company ang binabago, hindi ang department
+    if (field !== "name" && row.supervisorEditTarget === "company") {
+      const res = await api.patch<CompanyInfoEditResult>(`${BASE}/company/${row.companyId}/supervisor`, { field, value });
+      const saved = res.data.value ?? "";
+      patchWhere(
+        (s) => s.companyId === row.companyId && s.supervisorEditTarget === "company",
+        field === "supervisorName" ? { supervisorName: saved } : { supervisorPosition: saved },
+      );
+      alsoUpdated(res.data.affected, "company");
+      return;
+    }
     const res = await api.patch<CompanyInfoEditResult>(
       `${BASE}/department/${row.departmentId}`,
       {
@@ -391,7 +400,7 @@ export function CompanyInfoPanel({
                         <TableCell className={CELL}>
                           <EditableCell
                             label="Contact number"
-                            kind="tel"
+                            maxLength={CONTACT_MAX}
                             value={s.contactNumber}
                             validate={phone}
                             onSave={(v) => saveCompany(s, "contactNumber", v)}
@@ -403,7 +412,6 @@ export function CompanyInfoPanel({
                             label="Supervisor name"
                             value={s.supervisorName}
                             maxLength={255}
-                            validate={required("Supervisor name")}
                             onSave={(v) =>
                               saveDepartment(s, "supervisorName", v)
                             }

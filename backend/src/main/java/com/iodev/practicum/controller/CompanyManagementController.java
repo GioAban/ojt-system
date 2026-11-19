@@ -23,13 +23,17 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
+import com.iodev.practicum.service.CompanyNatures;
 import java.util.stream.Collectors;
 import com.iodev.practicum.model.DepartmentMoaFile;
 import com.iodev.practicum.repository.DepartmentMoaFileRepository;
+import com.iodev.practicum.service.FieldErrors;
+import com.iodev.practicum.service.SkillService;
 import com.iodev.practicum.service.SupervisorResolver;
 
 
@@ -37,7 +41,6 @@ import com.iodev.practicum.service.SupervisorResolver;
 @RequestMapping("/api/coordinator/companies")
 public class CompanyManagementController {
 
-    private static final Pattern PHONE = Pattern.compile("^[0-9+()\\-\\s]{7,20}$");
 
     @Autowired
     private CoordinatorRepository coordinatorRepository;
@@ -59,6 +62,9 @@ public class CompanyManagementController {
 
     @Autowired
     private DepartmentMoaFileRepository moaFileRepository;
+
+    @Autowired
+    private SkillService skillService;
 
     // =====================================================================
     // Listahan
@@ -88,6 +94,7 @@ public class CompanyManagementController {
             }
         }
 
+        Map<Long, List<String>> skillsOf = skillService.companySkills(companies.stream().map(Company::getId).toList());
         List<CompanyItem> items = new ArrayList<>();
         for (Company c : companies) {
             List<DepartmentItem> deptItems = byCompany.getOrDefault(c.getId(), List.of()).stream()
@@ -103,7 +110,7 @@ public class CompanyManagementController {
             CompanyNature nature = c.getNature();
             items.add(new CompanyItem(
                     c.getId(), c.getName(), c.getAddress(), c.getLocation(), c.getContactNumber(),
-                    nature == null ? null : nature.getId(), nature == null ? null : nature.getName(),
+                    nature == null ? null : nature.getId(), CompanyNatures.label(c),
                     // Blangko ang "N/A" para hindi ito lumabas sa Edit company at hindi maibalik sa pag-save
                     c.getDescription(),
                     SupervisorResolver.cleanOrNull(c.getImsupFullname()),
@@ -111,7 +118,9 @@ public class CompanyManagementController {
                     SupervisorResolver.cleanOrNull(c.getImsupContactNumber()),
                     SupervisorResolver.cleanOrNull(c.getImsupEmail()),
                     c.getImsupCompEvidIdentity(), c.getImsupCompEvidIdentityNo(),
-                    Boolean.TRUE.equals(c.getIsArchived()), placed, slots, deptItems));
+                    Boolean.TRUE.equals(c.getIsArchived()), placed, slots, deptItems,
+                    skillsOf.getOrDefault(c.getId(), List.of()),
+                    CompanyNatures.isOther(nature) ? CompanyNatures.cleanOther(c.getNatureOther()) : null));
         }
 
         List<NatureItem> natures = natureRepository.findAll(Sort.by("name")).stream()
@@ -131,29 +140,32 @@ public class CompanyManagementController {
         Coordinator coordinator = current(authentication);
         if (coordinator == null) return noProfile();
 
-        String error = validateCompany(request);
-        if (error != null) return bad(error);
-
+        if (request == null) return bad("Request body is required.");
         if (request.semesterId() == null) return bad("Please select a semester.");
         Semester semester = semesterRepository.findById(request.semesterId()).orElse(null);
         if (semester == null) return bad("Selected semester was not found.");
         if (Boolean.TRUE.equals(semester.getIsArchived())) return bad("That semester is archived.");
 
-        CompanyNature nature = natureRepository.findById(request.natureId()).orElse(null);
-        if (nature == null) return bad("Selected nature was not found.");
-
-        String name = clean(request.name());
-        if (companyRepository.nameExists(coordinator.getId(), semester.getId(), name)) {
-            return conflict("You already have a company with that name in this semester.");
+        FieldErrors errors = validateCompany(request);
+        validateDepartments(errors, request, null);
+        if (errors.isEmpty() && companyRepository.nameExists(coordinator.getId(), semester.getId(), clean(request.name()))) {
+            errors.add("name", "You already have a company with that name in this semester.");
         }
+        if (!errors.isEmpty()) return errors.toResponse();
+
+        CompanyNature nature = natureRepository.findById(request.natureId()).orElse(null);
+        if (nature == null) return new FieldErrors().add("natureId", "Selected nature was not found.").toResponse();
 
         Company company = new Company();
         company.setCoordinator(coordinator);
         company.setSemester(semester);
         company.setIsArchived(false);
         applyCompany(company, request, nature);
+        company = companyRepository.save(company);
+        long naStudents = applyDepartments(company, request);
+        if (request.skills() != null) skillService.setCompanySkills(company, request.skills());
 
-        return ResponseEntity.ok(Map.of("id", companyRepository.save(company).getId()));
+        return ResponseEntity.ok(Map.of("id", company.getId(), "naStudents", naStudents));
     }
 
     @PutMapping("/{id}")
@@ -165,23 +177,27 @@ public class CompanyManagementController {
         if (coordinator == null) return noProfile();
 
         Company company = companyRepository.findById(id).orElse(null);
-        if (company == null) return ResponseEntity.notFound().build();
+        // Ang hiling mula sa company link ay inaayos sa Requests tab, hindi dito
+        if (company == null || company.isHiddenRequest()) return ResponseEntity.notFound().build();
         if (!owns(coordinator, company)) return notOwner();
 
-        String error = validateCompany(request);
-        if (error != null) return bad(error);
+        if (request == null) return bad("Request body is required.");
+        FieldErrors errors = validateCompany(request);
+        validateDepartments(errors, request, company);
+        if (errors.isEmpty() && companyRepository.nameExistsExcluding(
+                coordinator.getId(), company.getSemester().getId(), clean(request.name()), id)) {
+            errors.add("name", "You already have a company with that name in this semester.");
+        }
+        if (!errors.isEmpty()) return errors.toResponse();
 
         CompanyNature nature = natureRepository.findById(request.natureId()).orElse(null);
-        if (nature == null) return bad("Selected nature was not found.");
-
-        String name = clean(request.name());
-        if (companyRepository.nameExistsExcluding(
-                coordinator.getId(), company.getSemester().getId(), name, id)) {
-            return conflict("You already have a company with that name in this semester.");
-        }
+        if (nature == null) return new FieldErrors().add("natureId", "Selected nature was not found.").toResponse();
 
         applyCompany(company, request, nature);
-        return ResponseEntity.ok(Map.of("id", companyRepository.save(company).getId()));
+        companyRepository.save(company);
+        long naStudents = applyDepartments(company, request);
+        if (request.skills() != null) skillService.setCompanySkills(company, request.skills());
+        return ResponseEntity.ok(Map.of("id", company.getId(), "naStudents", naStudents));
     }
 
     @PatchMapping("/{id}/archive")
@@ -191,7 +207,8 @@ public class CompanyManagementController {
         if (coordinator == null) return noProfile();
 
         Company company = companyRepository.findById(id).orElse(null);
-        if (company == null) return ResponseEntity.notFound().build();
+        // Ang hiling mula sa company link ay inaayos sa Requests tab, hindi dito
+        if (company == null || company.isHiddenRequest()) return ResponseEntity.notFound().build();
         if (!owns(coordinator, company)) return notOwner();
 
         long placed = filledCounts(departmentRepository.findAllByCompanyIds(List.of(id)))
@@ -213,7 +230,8 @@ public class CompanyManagementController {
         if (coordinator == null) return noProfile();
 
         Company company = companyRepository.findById(id).orElse(null);
-        if (company == null) return ResponseEntity.notFound().build();
+        // Ang hiling mula sa company link ay inaayos sa Requests tab, hindi dito
+        if (company == null || company.isHiddenRequest()) return ResponseEntity.notFound().build();
         if (!owns(coordinator, company)) return notOwner();
 
         if (companyRepository.nameExistsExcluding(
@@ -239,7 +257,8 @@ public class CompanyManagementController {
         if (coordinator == null) return noProfile();
 
         Company company = companyRepository.findById(companyId).orElse(null);
-        if (company == null) return ResponseEntity.notFound().build();
+        // Ang hiling mula sa company link ay inaayos sa Requests tab, hindi dito
+        if (company == null || company.isHiddenRequest()) return ResponseEntity.notFound().build();
         if (!owns(coordinator, company)) return notOwner();
         if (Boolean.TRUE.equals(company.getIsArchived())) return bad("Restore the company first.");
 
@@ -268,7 +287,7 @@ public class CompanyManagementController {
         if (coordinator == null) return noProfile();
 
         Department department = departmentRepository.findById(id).orElse(null);
-        if (department == null) return ResponseEntity.notFound().build();
+        if (department == null || department.getCompany().isHiddenRequest()) return ResponseEntity.notFound().build();
         if (!owns(coordinator, department.getCompany())) return notOwner();
 
         String error = validateDepartment(request);
@@ -298,7 +317,7 @@ public class CompanyManagementController {
         if (coordinator == null) return noProfile();
 
         Department department = departmentRepository.findById(id).orElse(null);
-        if (department == null) return ResponseEntity.notFound().build();
+        if (department == null || department.getCompany().isHiddenRequest()) return ResponseEntity.notFound().build();
         if (!owns(coordinator, department.getCompany())) return notOwner();
 
         String status = request == null || request.status() == null ? "" : request.status().trim();
@@ -318,7 +337,7 @@ public class CompanyManagementController {
         if (coordinator == null) return noProfile();
 
         Department department = departmentRepository.findById(id).orElse(null);
-        if (department == null) return ResponseEntity.notFound().build();
+        if (department == null || department.getCompany().isHiddenRequest()) return ResponseEntity.notFound().build();
         if (!owns(coordinator, department.getCompany())) return notOwner();
 
         long filled = filledCounts(List.of(department)).getOrDefault(id, 0L);
@@ -339,7 +358,7 @@ public class CompanyManagementController {
         if (coordinator == null) return noProfile();
 
         Department department = departmentRepository.findById(id).orElse(null);
-        if (department == null) return ResponseEntity.notFound().build();
+        if (department == null || department.getCompany().isHiddenRequest()) return ResponseEntity.notFound().build();
         if (!owns(coordinator, department.getCompany())) return notOwner();
 
         if (Boolean.TRUE.equals(department.getCompany().getIsArchived())) {
@@ -383,7 +402,7 @@ public class CompanyManagementController {
         return ResponseEntity.status(409).body(message);
     }
 
-    private String clean(String value) {
+    private static String clean(String value) {
         return value == null ? "" : value.trim().replaceAll("\\s+", " ");
     }
 
@@ -430,46 +449,205 @@ public class CompanyManagementController {
         }
     }
 
-    private String validateCompany(CompanyRequest r) {
-        if (r == null) return "Request body is required.";
-
+    /** Mga detalye ng company at ang immediate supervisor (kailangan lahat), bawat field */
+    private FieldErrors validateCompany(CompanyRequest r) {
+        FieldErrors e = new FieldErrors();
         String name = clean(r.name());
         String address = clean(r.address());
         String location = clean(r.location());
-        String contact = clean(r.contactNumber());
+        String contact = SupervisorResolver.cleanContact(r.contactNumber());
         String idType = clean(r.idType());
         String idNumber = clean(r.idNumber());
         String description = r.description() == null ? "" : r.description().trim();
 
-        if (name.isEmpty()) return "Company name is required.";
-        if (name.length() > 255) return "Company name is too long (max 255 characters).";
-        if (r.natureId() == null) return "Please select the nature of the company.";
-        if (address.isEmpty()) return "Address is required.";
-        if (address.length() > 255) return "Address is too long (max 255 characters).";
-        if (location.length() > 255) return "Location is too long (max 255 characters).";
-        if (contact.isEmpty()) return "Contact number is required.";
-        if (!PHONE.matcher(contact).matches()) return "Enter a valid contact number.";
+        if (name.isEmpty()) e.add("name", "Enter the company name.");
+        else if (name.length() > 255) e.add("name", "Company name is too long (max 255 characters).");
+        if (r.natureId() == null) e.add("natureId", "Select the nature of the company.");
+        else {
+            String natureError = CompanyNatures.problem(natureRepository.findById(r.natureId()).orElse(null), r.natureOther());
+            if (natureError != null) e.add("natureOther", natureError);
+        }
+        if (address.isEmpty()) e.add("address", "Enter the company address.");
+        else if (address.length() > 255) e.add("address", "Address is too long (max 255 characters).");
+        if (location.length() > 255) e.add("location", "Location is too long (max 255 characters).");
+        if (contact.isEmpty()) e.add("contactNumber", "Enter a contact number.");
+        else if (contact.length() > SupervisorResolver.CONTACT_MAX) e.add("contactNumber", SupervisorResolver.CONTACT_TOO_LONG);
+        // Kailangan sa bawat company: ginagamit kapag walang supervisor ang department ng student
+        SupervisorResolver.requireAll(e, "supervisor", r.supervisorName(), r.supervisorPosition(),
+                r.supervisorContactNumber(), r.supervisorEmail());
+        if (idType.length() > 255 || idNumber.length() > 255) e.add("idType", "The supervisor ID details are too long.");
+        if (description.length() > 5000) e.add("description", "The description is too long (max 5000 characters).");
+        String skillsError = SkillService.validate(r.skills());
+        if (skillsError != null) e.add("skills", skillsError);
+        return e;
+    }
 
-        // Opsyonal ang immediate supervisor; kapag may pangalan, kailangan ang posisyon (at baliktad)
-        String error = SupervisorResolver.validate(r.supervisorName(), r.supervisorPosition(),
-                r.supervisorContactNumber(), r.supervisorEmail(), "immediate supervisor");
-        if (error != null) return error;
+    /** Totoong department (hindi ang N/A na placeholder at hindi hiling na pending o declined) */
+    private static boolean isReal(Department d) {
+        String status = d.getStatus() == null ? "approved" : d.getStatus().trim().toLowerCase();
+        return !SupervisorResolver.isPlaceholderDepartment(d.getName()) && status.equals("approved");
+    }
 
-        if (idType.length() > 255 || idNumber.length() > 255) return "The supervisor ID details are too long.";
-        if (description.length() > 5000) return "The description is too long (max 5000 characters).";
-        return null;
+    private static String placed(List<Department> departments, Map<Long, Long> filled) {
+        return departments.stream()
+                .map(d -> clean(d.getName()) + " (" + filled.getOrDefault(d.getId(), 0L) + ")")
+                .collect(Collectors.joining(", "));
+    }
+
+    /**
+     * "Does this company have departments?": Yes = listahan (kahit isa, natatanging pangalan, slots 1 hanggang 500,
+     * opsyonal na supervisor); No = N/A na department na may slots. Hindi pinapayagang alisin ang department na may student.
+     */
+    private void validateDepartments(FieldErrors e, CompanyRequest r, Company company) {
+        if (r.hasDepartments() == null && r.departments() == null) return; // lumang client: hindi ginagalaw
+        List<Department> existing = company == null ? List.of()
+                : departmentRepository.findAllByCompanyIds(List.of(company.getId()));
+        Map<Long, Long> filled = filledCounts(existing);
+        List<Department> activeReal = existing.stream()
+                .filter(d -> !Boolean.TRUE.equals(d.getIsArchived()) && isReal(d)).toList();
+
+        if (Boolean.TRUE.equals(r.hasDepartments())) {
+            List<DepartmentRow> rows = r.departments() == null ? List.of() : r.departments();
+            if (rows.isEmpty()) e.add("departments", "Add at least one department, or choose No.");
+            Set<String> seen = new HashSet<>();
+            Set<Long> kept = new HashSet<>();
+            for (int i = 0; i < rows.size(); i++) {
+                DepartmentRow row = rows.get(i);
+                String at = "departments[" + i + "].";
+                String name = clean(row.name());
+                if (name.isEmpty()) e.add(at + "name", "Enter the department name.");
+                else if (name.length() > 255) e.add(at + "name", "Department name is too long (max 255 characters).");
+                else if (SupervisorResolver.isPlaceholderDepartment(name)) {
+                    e.add(at + "name", "N/A is used when the company has no departments. Choose No instead.");
+                } else if (!seen.add(name.toLowerCase())) e.add(at + "name", "This department is already in the list.");
+                if (row.slots() == null || row.slots() < 1 || row.slots() > 500) {
+                    e.add(at + "slots", "Slots must be a number from 1 to 500.");
+                }
+                SupervisorResolver.optionalPair(e, at + "supervisor", row.supervisorFullname(), row.supervisorPosition(),
+                        row.supervisorContactNumber(), row.supervisorEmail());
+                if (row.id() != null) {
+                    Department d = existing.stream().filter(x -> x.getId().equals(row.id())).findFirst().orElse(null);
+                    if (d == null) {
+                        e.add(at + "name", "This department wasn't found in this company.");
+                        continue;
+                    }
+                    kept.add(d.getId());
+                    long n = filled.getOrDefault(d.getId(), 0L);
+                    if (row.slots() != null && row.slots() < n) {
+                        e.add(at + "slots", n + " student(s) are placed here, so slots can't be lower than that.");
+                    }
+                }
+            }
+            List<Department> removedWithStudents = activeReal.stream()
+                    .filter(d -> !kept.contains(d.getId()) && filled.getOrDefault(d.getId(), 0L) > 0).toList();
+            if (!removedWithStudents.isEmpty()) {
+                e.add("departments", "Reassign the students in " + placed(removedWithStudents, filled)
+                        + " before removing " + (removedWithStudents.size() == 1 ? "it." : "them."));
+            }
+        } else {
+            Integer slots = r.naSlots();
+            if (slots == null || slots < 1 || slots > 500) e.add("naSlots", "Slots must be a number from 1 to 500.");
+            List<Department> withStudents = activeReal.stream().filter(d -> filled.getOrDefault(d.getId(), 0L) > 0).toList();
+            if (!withStudents.isEmpty()) {
+                e.add("hasDepartments", "Reassign the students in " + placed(withStudents, filled) + " first, then choose No.");
+            }
+            Department na = existing.stream().filter(d -> SupervisorResolver.isPlaceholderDepartment(d.getName())).findFirst().orElse(null);
+            long onNa = na == null ? 0 : filled.getOrDefault(na.getId(), 0L);
+            if (slots != null && slots < onNa) e.add("naSlots", onNa + " student(s) are placed under N/A, so slots can't be lower than that.");
+        }
+    }
+
+    /** Isinusulat ang pinili; ibinabalik kung ilang student ang naiwan sa N/A (kapag Yes) */
+    private long applyDepartments(Company company, CompanyRequest r) {
+        if (r.hasDepartments() == null && r.departments() == null) return 0;
+        List<Department> existing = departmentRepository.findAllByCompanyIds(List.of(company.getId()));
+        Map<Long, Long> filled = filledCounts(existing);
+        Department na = existing.stream()
+                .filter(d -> SupervisorResolver.isPlaceholderDepartment(d.getName()))
+                .min((a, b) -> Boolean.compare(Boolean.TRUE.equals(a.getIsArchived()), Boolean.TRUE.equals(b.getIsArchived())))
+                .orElse(null);
+
+        if (Boolean.TRUE.equals(r.hasDepartments())) {
+            Set<Long> kept = new HashSet<>();
+            for (DepartmentRow row : r.departments() == null ? List.<DepartmentRow>of() : r.departments()) {
+                String name = clean(row.name());
+                Department d = row.id() == null ? null
+                        : existing.stream().filter(x -> x.getId().equals(row.id())).findFirst().orElse(null);
+                if (d == null) {
+                    // Ibinabalik ang naka-archive na department na may parehong pangalan, sa halip na gumawa ng kapareho
+                    d = existing.stream()
+                            .filter(x -> Boolean.TRUE.equals(x.getIsArchived()) && isReal(x) && clean(x.getName()).equalsIgnoreCase(name))
+                            .findFirst().orElse(null);
+                }
+                if (d == null) {
+                    d = new Department();
+                    d.setCompany(company);
+                }
+                d.setName(name);
+                d.setSlots(row.slots());
+                d.setStatus("approved");
+                d.setIsArchived(false);
+                d.setSupervisorFullname(clean(row.supervisorFullname()));
+                d.setSupervisorPosition(clean(row.supervisorPosition()));
+                d.setSupervisorContactNumber(SupervisorResolver.cleanContact(row.supervisorContactNumber()));
+                d.setSupervisorEmail(clean(row.supervisorEmail()).toLowerCase());
+                d = departmentRepository.save(d);
+                kept.add(d.getId());
+            }
+            // Mga inalis sa listahan (walang student, nasuri na): archive, hindi binubura
+            for (Department d : existing) {
+                if (!Boolean.TRUE.equals(d.getIsArchived()) && isReal(d) && !kept.contains(d.getId())) {
+                    d.setIsArchived(true);
+                    departmentRepository.save(d);
+                }
+            }
+            // Ang N/A ay naiiwan para sa mga student na nandoon pa; kung wala na, archive
+            if (na != null && !Boolean.TRUE.equals(na.getIsArchived())) {
+                long onNa = filled.getOrDefault(na.getId(), 0L);
+                if (onNa == 0) {
+                    na.setIsArchived(true);
+                    departmentRepository.save(na);
+                }
+                return onNa;
+            }
+            return 0;
+        }
+
+        // No: walang student ang mga totoong department (nasuri na), kaya archive; N/A ang ginagamit
+        for (Department d : existing) {
+            if (!Boolean.TRUE.equals(d.getIsArchived()) && isReal(d)) {
+                d.setIsArchived(true);
+                departmentRepository.save(d);
+            }
+        }
+        if (na == null) {
+            na = new Department();
+            na.setCompany(company);
+            na.setName("N/A");
+            na.setSupervisorFullname("");
+            na.setSupervisorPosition("");
+            na.setSupervisorContactNumber("");
+            na.setSupervisorEmail("");
+        }
+        na.setSlots(r.naSlots());
+        na.setStatus("approved");
+        na.setIsArchived(false);
+        departmentRepository.save(na);
+        return 0;
     }
 
     private void applyCompany(Company company, CompanyRequest r, CompanyNature nature) {
         company.setName(clean(r.name()));
         company.setNature(nature);
+        company.setNatureOther(CompanyNatures.storedOther(nature, r.natureOther()));
         company.setAddress(clean(r.address()));
         company.setLocation(emptyToNull(clean(r.location())));
-        company.setContactNumber(clean(r.contactNumber()));
+        // Contact number: malayang teksto, trim lang (puwedeng higit sa isang numero)
+        company.setContactNumber(SupervisorResolver.cleanContact(r.contactNumber()));
         // Blangkong teksto (hindi null) dahil NOT NULL pa ang mga lumang column sa database
         company.setImsupFullname(SupervisorResolver.clean(r.supervisorName()));
         company.setImsupPosition(SupervisorResolver.clean(r.supervisorPosition()));
-        company.setImsupContactNumber(SupervisorResolver.cleanOrNull(r.supervisorContactNumber()));
+        company.setImsupContactNumber(SupervisorResolver.cleanContactOrNull(r.supervisorContactNumber()));
         company.setImsupEmail(emptyToNull(SupervisorResolver.clean(r.supervisorEmail()).toLowerCase()));
 
         // Kapag hindi ipinadala (null), iniiwan ang dating laman para hindi mabura sa pag-edit
@@ -519,11 +697,22 @@ public class CompanyManagementController {
 
         d.setName(clean(r.name()));
         d.setSlots(r.slots());
-        d.setSupervisorFullname(clean(r.supervisorFullname()));
-        // Blangkong teksto ang walang laman (hindi null), para hindi mabangga ang NOT NULL sa database
-        d.setSupervisorPosition(clean(r.supervisorPosition()));
-        d.setSupervisorContactNumber(clean(r.supervisorContactNumber()));
-        d.setSupervisorEmail(clean(r.supervisorEmail()).toLowerCase());
+        if (SupervisorResolver.isPlaceholderDepartment(d.getName())) {
+            // N/A: walang sariling supervisor (ang immediate supervisor ng company ang ginagamit).
+            // Bago: blangko. Dati na: hindi ginagalaw ang lumang laman (inaayos gamit ang SQL, hindi awtomatiko).
+            if (d.getId() == null) {
+                d.setSupervisorFullname("");
+                d.setSupervisorPosition("");
+                d.setSupervisorContactNumber("");
+                d.setSupervisorEmail("");
+            }
+        } else {
+            d.setSupervisorFullname(clean(r.supervisorFullname()));
+            // Blangkong teksto ang walang laman (hindi null), para hindi mabangga ang NOT NULL sa database
+            d.setSupervisorPosition(clean(r.supervisorPosition()));
+            d.setSupervisorContactNumber(SupervisorResolver.cleanContact(r.supervisorContactNumber()));
+            d.setSupervisorEmail(clean(r.supervisorEmail()).toLowerCase());
+        }
         d.setStatus(approved ? "approved" : "pending");
         d.setMoaStart(start == null ? null : start.toString());
         d.setMoaExpiration(end == null ? null : end.toString());

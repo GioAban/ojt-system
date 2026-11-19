@@ -52,6 +52,10 @@ export function DepartmentFormDialog({
     email: cleanSupervisorText(department?.supervisorEmail),
   });
   const [supErrors, setSupErrors] = useState<SupervisorErrors>({});
+  // Ang N/A ng company na walang department (blangko o "N/A" ang naka-save na pangalan)
+  const savedName = (department?.name ?? "").trim().toUpperCase();
+  const isNaDepartment = (department != null && (savedName === "" || savedName === "N/A"))
+    || name.trim().toUpperCase() === "N/A";
   const [moaStart, setMoaStart] = useState(
     (department?.moaStart ?? "").slice(0, 10),
   );
@@ -78,6 +82,8 @@ export function DepartmentFormDialog({
     const next: Record<string, string> = {};
     const slotCount = Number(slots);
 
+    if (!name.trim()) next.name = "Enter the department name.";
+
     if (
       !slots.trim() ||
       !Number.isInteger(slotCount) ||
@@ -100,7 +106,9 @@ export function DepartmentFormDialog({
     setFormError("");
 
     const found = validate();
-    const foundSup = validateSupervisor(supervisor);
+    // N/A: nakatago ang supervisor at hindi ito sine-save, kaya hindi rin sinusuri
+    const foundSup = isNaDepartment ? {} : validateSupervisor(supervisor);
+    const sup = isNaDepartment ? { name: "", position: "", contact: "", email: "" } : supervisor;
     setErrors(found);
     setSupErrors(foundSup);
     if (Object.keys(found).length > 0 || Object.keys(foundSup).length > 0) return;
@@ -108,13 +116,13 @@ export function DepartmentFormDialog({
     setSaving(true);
 
     const payload = {
-      // Hindi lahat ng company ay may department, kaya N/A ang itatabi kapag walang pangalan
-      name: name.trim() || "N/A",
+      // Ang N/A ay hinahawakan na ng "Does this company have departments?" sa company form
+      name: name.trim(),
       slots: Number(slots),
-      supervisorFullname: supervisor.name.trim(),
-      supervisorPosition: supervisor.position.trim(),
-      supervisorContactNumber: supervisor.contact.trim(),
-      supervisorEmail: supervisor.email.trim(),
+      supervisorFullname: sup.name.trim(),
+      supervisorPosition: sup.position.trim(),
+      supervisorContactNumber: sup.contact.trim(),
+      supervisorEmail: sup.email.trim(),
       // Ang idinagdag o ine-edit ng coordinator ay approved; ang pending ay nasa Requests tab
       status: "APPROVED",
       moaStart: moaStart || null,
@@ -165,7 +173,8 @@ export function DepartmentFormDialog({
           <DialogBody className="flex flex-col gap-6">
             <div className="grid gap-4 sm:grid-cols-3">
               <Field
-                label="Department name (optional)"
+                label="Department name"
+              required
                 htmlFor="dep-name"
                 error={errors.name}
                 className="sm:col-span-2"
@@ -173,7 +182,7 @@ export function DepartmentFormDialog({
                 <Input
                   id="dep-name"
                   maxLength={255}
-                  placeholder="e.g. MIS Office (leave blank if none, saved as N/A)"
+                  placeholder="e.g. MIS Office"
                   aria-invalid={Boolean(errors.name)}
                   value={name}
                   onChange={(e) => {
@@ -204,6 +213,12 @@ export function DepartmentFormDialog({
               </Field>
             </div>
 
+            {/* N/A (company na walang department): walang sariling supervisor; immediate supervisor ng company ang gamit */}
+            {isNaDepartment ? (
+              <p className="border-t pt-5 text-sm text-muted-foreground">
+                Students under N/A use the company&apos;s immediate supervisor. Change it in Edit company.
+              </p>
+            ) : (
             <SupervisorFields
               idPrefix="dep-sup"
               title="Supervisor"
@@ -215,6 +230,7 @@ export function DepartmentFormDialog({
                 setSupErrors((prev) => clearSupervisorError(prev, key));
               }}
             />
+            )}
 
             <section className="flex flex-col gap-4 border-t pt-5">
               <div>

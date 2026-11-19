@@ -114,7 +114,7 @@ export function EditableCell({
         title="Click to edit"
         className="group flex w-full items-start gap-1 rounded-md px-2 py-1 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <span className="min-w-0 flex-1 break-words">
+        <span className="min-w-0 flex-1 break-words wrap-anywhere">
           {current ? (
             display ? (
               display(current)

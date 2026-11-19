@@ -1,5 +1,9 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.ActionException;
+import com.iodev.practicum.service.OjtCompletionService;
+import com.iodev.practicum.service.PlacementService;
+import com.iodev.practicum.service.CompanyNatures;
 import com.iodev.practicum.service.SupervisorResolver;
 import com.iodev.practicum.dto.AssignmentResultResponse;
 import com.iodev.practicum.dto.CompanyOptionResponse;
@@ -50,6 +54,12 @@ public class CoordinatorStudentController {
 
     @Autowired
     private StudentDepartmentHistoryRepository historyRepository;
+
+    @Autowired
+    private PlacementService placementService;
+
+    @Autowired
+    private OjtCompletionService ojtCompletionService;
 
     @GetMapping("/{studentId}/company-options")
     @Transactional(readOnly = true)
@@ -104,7 +114,7 @@ public class CoordinatorStudentController {
         List<CompanyOptionResponse> result = companies.stream()
                 .map(c -> new CompanyOptionResponse(
                         c.getId(), c.getName(), c.getAddress(), c.getLocation(), c.getContactNumber(),
-                        c.getNature() == null ? null : c.getNature().getName(),
+                        CompanyNatures.label(c),
                         c.getDescription(), SupervisorResolver.cleanOrNull(c.getImsupFullname()),
                         SupervisorResolver.cleanOrNull(c.getImsupPosition()),
                         byCompany.getOrDefault(c.getId(), List.of())))
@@ -135,62 +145,12 @@ public class CoordinatorStudentController {
             return ResponseEntity.status(403).body("You can only manage your own students.");
         }
 
-        Department department = departmentRepository.findById(request.getDepartmentId()).orElse(null);
-        if (department == null) {
-            return ResponseEntity.badRequest().body("Selected department was not found.");
+        // Nasa PlacementService ang mga tuntunin (iisa para sa Students page at sa mga report)
+        try {
+            return ResponseEntity.ok(placementService.assign(coordinator, student, request.getDepartmentId()));
+        } catch (ActionException e) {
+            return e.toResponse();
         }
-
-        Company company = department.getCompany();
-        if (!company.getCoordinator().getId().equals(coordinator.getId())) {
-            return ResponseEntity.status(403).body("That company doesn't belong to you.");
-        }
-        if (!company.getSemester().getId().equals(student.getSemester().getId())) {
-            return ResponseEntity.badRequest().body("That company belongs to a different semester.");
-        }
-        if (Boolean.TRUE.equals(company.getIsArchived()) || Boolean.TRUE.equals(department.getIsArchived())) {
-            return ResponseEntity.badRequest().body("That company or department is archived.");
-        }
-        if (!"approved".equalsIgnoreCase(department.getStatus())) {
-            return ResponseEntity.badRequest().body("That department isn't approved yet.");
-        }
-
-        AssignmentResultResponse result =
-                new AssignmentResultResponse(department.getId(), department.getName(), company.getName());
-
-        Department currentDepartment = student.getDepartment();
-        if (currentDepartment != null && currentDepartment.getId().equals(department.getId())) {
-            return ResponseEntity.ok(result); // walang babaguhin
-        }
-
-        long filled = 0;
-        for (Object[] row : studentRepository.countByDepartmentIds(List.of(department.getId()))) {
-            filled = (Long) row[1];
-        }
-        int slots = department.getSlots() == null ? 0 : department.getSlots();
-        if (filled >= slots) {
-            return ResponseEntity.status(409).body("This department has no slots left.");
-        }
-
-        Timestamp now = new Timestamp(System.currentTimeMillis());
-        boolean hadPrevious = currentDepartment != null || historyRepository.countByStudentId(studentId) > 0;
-
-        List<StudentDepartmentHistory> open = historyRepository.findByStudentIdAndEndedAtIsNull(studentId);
-        for (StudentDepartmentHistory h : open) {
-            h.setEndedAt(now);
-        }
-        historyRepository.saveAll(open);
-
-        StudentDepartmentHistory history = new StudentDepartmentHistory();
-        history.setStudent(student);
-        history.setDepartment(department);
-        history.setType(hadPrevious ? "transferred" : "initial");
-        history.setStartedAt(now);
-        historyRepository.save(history);
-
-        student.setDepartment(department);
-        studentRepository.save(student);
-
-        return ResponseEntity.ok(result);
     }
 
     @DeleteMapping("/{studentId}/department")
@@ -274,20 +234,6 @@ public class CoordinatorStudentController {
             return ResponseEntity.badRequest().body("Please enter the completion date.");
         }
 
-        LocalDate completed;
-        try {
-            completed = LocalDate.parse(raw);
-        } catch (DateTimeParseException e) {
-            return ResponseEntity.badRequest().body("Date must look like 2026-04-30.");
-        }
-
-        if (completed.isAfter(LocalDate.now())) {
-            return ResponseEntity.badRequest().body("The completion date can't be in the future.");
-        }
-        if (completed.getYear() < 2000) {
-            return ResponseEntity.badRequest().body("Please enter a valid completion date.");
-        }
-
         Coordinator coordinator = currentCoordinator(authentication);
         if (coordinator == null) {
             return ResponseEntity.status(403).body("Coordinator profile not found.");
@@ -301,38 +247,14 @@ public class CoordinatorStudentController {
             return ResponseEntity.status(403).body("You can only manage your own students.");
         }
 
-        if (student.getDepartment() == null) {
-            return ResponseEntity.badRequest()
-                    .body("Assign the student to a company before completing the OJT.");
+        // Nasa OjtCompletionService ang pagsusuri at pagsulat (iisa para sa Students page at sa mga report)
+        try {
+            java.time.LocalDate completed = ojtCompletionService.checkDate(student, raw);
+            ojtCompletionService.complete(student, completed);
+            return ResponseEntity.ok(Map.of("status", "Completed", "completedDate", completed.toString()));
+        } catch (ActionException e) {
+            return e.toResponse();
         }
-
-        String startRaw = student.getStartTrainingDate() != null && !student.getStartTrainingDate().isBlank()
-                ? student.getStartTrainingDate()
-                : student.getDeployedDate();
-        if (startRaw != null && startRaw.length() >= 10) {
-            try {
-                LocalDate start = LocalDate.parse(startRaw.substring(0, 10));
-                if (completed.isBefore(start)) {
-                    return ResponseEntity.badRequest()
-                            .body("The completion date can't be earlier than the start date (" + start + ").");
-                }
-            } catch (DateTimeParseException ignored) {
-                // hindi mabasa ang start date, laktawan ang pagsusuri
-            }
-        }
-
-        student.setStatus("Completed");
-        student.setCompletedDate(completed.toString());
-        studentRepository.save(student);
-
-        Timestamp end = Timestamp.valueOf(completed.atStartOfDay());
-        List<StudentDepartmentHistory> open = historyRepository.findByStudentIdAndEndedAtIsNull(studentId);
-        for (StudentDepartmentHistory h : open) {
-            h.setEndedAt(h.getStartedAt() != null && end.before(h.getStartedAt()) ? h.getStartedAt() : end);
-        }
-        historyRepository.saveAll(open);
-
-        return ResponseEntity.ok(Map.of("status", "Completed", "completedDate", completed.toString()));
     }
 
     @PatchMapping("/{studentId}/employment")

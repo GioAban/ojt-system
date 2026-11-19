@@ -3,23 +3,23 @@ import {
   ArchiveRestore,
   CheckCircle2,
   Ellipsis,
-  Mail,
   Paperclip,
   Pencil,
-  Phone,
   Plus,
   UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ContactText } from "@/components/ContactText";
+import { SkillChips } from "@/components/skills/SkillChips";
 import { stackedTable } from "@/lib/responsive";
-import { isApproved } from "@/lib/company";
+import { isApproved, supervisorMissing } from "@/lib/company";
 import type { CompanyItem, DepartmentItem, ListingRow } from "@/types/company";
 import {
   ApprovalBadge,
   ArchivedBadge,
+  DepartmentSupervisorLines,
   MoaInfo,
-  SlotsMeter,
-} from "@/components/companies/parts";
+  SlotsMeter, SupervisorMissingBadge } from "@/components/companies/parts";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -103,14 +103,17 @@ export function CompanyListing({
                     <Badge variant="secondary">{company.nature}</Badge>
                   )}
                   {company.archived && <ArchivedBadge />}
+                  {supervisorMissing(company) && <SupervisorMissingBadge />}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {company.address}
                 </p>
-                <p className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Phone className="h-3 w-3" />
-                  {company.contactNumber}
-                </p>
+                <ContactText value={company.contactNumber} className="mt-0.5 text-xs text-muted-foreground" />
+                {company.skills.length > 0 && (
+                  <div className="mt-2">
+                    <SkillChips skills={company.skills} collapseAfter={4} />
+                  </div>
+                )}
               </TableCell>
 
               {/* Department */}
@@ -146,29 +149,7 @@ export function CompanyListing({
               {/* Supervisor */}
               <TableCell data-label="Supervisor" className={CELL}>
                 {d ? (
-                  <div className="flex flex-col gap-1 text-xs">
-                    <span className="inline-flex items-center gap-1.5 text-sm">
-                      <UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      {d.supervisorFullname || "Company's immediate supervisor"}
-                    </span>
-                    {d.supervisorFullname && d.supervisorPosition && (
-                      <span className="text-muted-foreground">
-                        {d.supervisorPosition}
-                      </span>
-                    )}
-                    {d.supervisorContactNumber && (
-                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                        <Phone className="h-3 w-3 shrink-0" />
-                        {d.supervisorContactNumber}
-                      </span>
-                    )}
-                    {d.supervisorEmail && (
-                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                        <Mail className="h-3 w-3 shrink-0" />
-                        {d.supervisorEmail}
-                      </span>
-                    )}
-                  </div>
+                  <DepartmentSupervisorLines company={company} d={d} />
                 ) : (
                   <div className="flex flex-col gap-1 text-xs">
                     <span className="inline-flex items-center gap-1.5 text-sm">

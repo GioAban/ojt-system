@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Mail,
   MapPin,
-  Phone,
   Search,
   UserMinus,
   UserRound,
@@ -10,6 +9,7 @@ import {
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
+import { ContactText } from "@/components/ContactText";
 import type { AssignmentResult, CompanyOption } from "@/types/assignment";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -254,10 +254,7 @@ export function AssignCompanyDialog({
                         ? ` · ${selectedCompany.location}`
                         : ""}
                     </span>
-                    <span className="inline-flex items-center gap-2">
-                      <Phone className="h-4 w-4 shrink-0" />
-                      {selectedCompany.contactNumber}
-                    </span>
+                    <ContactText value={selectedCompany.contactNumber} className="gap-2" iconClassName="h-4 w-4" />
                     {selectedCompany.supervisorName && (
                       <span className="inline-flex items-center gap-2">
                         <UserRound className="h-4 w-4 shrink-0" />
@@ -346,12 +343,7 @@ export function AssignCompanyDialog({
 
                         {(d.supervisorContactNumber || d.supervisorEmail) && (
                           <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                            {d.supervisorContactNumber && (
-                              <span className="inline-flex items-center gap-1">
-                                <Phone className="h-3 w-3" />
-                                {d.supervisorContactNumber}
-                              </span>
-                            )}
+                            <ContactText value={d.supervisorContactNumber} className="gap-1" />
                             {d.supervisorEmail && (
                               <span className="inline-flex items-center gap-1">
                                 <Mail className="h-3 w-3" />

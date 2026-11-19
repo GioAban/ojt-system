@@ -9,19 +9,20 @@ import {
   Mail,
   MapPin,
   Pencil,
-  Phone,
   Plus,
   UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isApproved } from "@/lib/company";
+import { ContactText } from "@/components/ContactText";
+import { SkillChips } from "@/components/skills/SkillChips";
+import { isApproved, supervisorMissing } from "@/lib/company";
+import { DepartmentSupervisorLines } from "@/components/companies/parts";
 import type { CompanyItem, DepartmentItem } from "@/types/company";
 import {
   ApprovalBadge,
   ArchivedBadge,
   MoaInfo,
-  SlotsMeter,
-} from "@/components/companies/parts";
+  SlotsMeter, SupervisorMissingBadge } from "@/components/companies/parts";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -94,6 +95,13 @@ export function CompanyCard({
               <MapPin className="h-3 w-3 shrink-0" />
               <span className="truncate">{company.address}</span>
             </span>
+            {company.skills.length > 0 && (
+              // Buod lang sa header (button ito); buong chips sa loob kapag binuksan
+              <span className="mt-1 block truncate text-xs text-muted-foreground">
+                Skills: {company.skills.slice(0, 3).join(", ")}
+                {company.skills.length > 3 ? ` +${company.skills.length - 3} more` : ""}
+              </span>
+            )}
           </span>
 
           <span className="hidden shrink-0 text-right text-xs sm:block">
@@ -163,15 +171,13 @@ export function CompanyCard({
                   )}
                 </span>
               </span>
-              <span className="inline-flex items-center gap-2">
-                <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
-                {company.contactNumber}
-              </span>
+              <ContactText value={company.contactNumber} className="gap-2" iconClassName="h-4 w-4 text-muted-foreground" />
             </div>
 
             <div className="flex flex-col gap-2 text-sm">
-              <p className="text-xs font-medium text-muted-foreground">
+              <p className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
                 Immediate supervisor
+                {supervisorMissing(company) && <SupervisorMissingBadge />}
               </p>
               <span className="inline-flex items-center gap-2">
                 <UserRound className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -186,12 +192,8 @@ export function CompanyCard({
                   <span className="text-muted-foreground">None set</span>
                 )}
               </span>
-              {company.supervisorContactNumber && (
-                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                  <Phone className="h-3.5 w-3.5 shrink-0" />
-                  {company.supervisorContactNumber}
-                </span>
-              )}
+              <ContactText value={company.supervisorContactNumber} className="gap-2 text-xs text-muted-foreground"
+                iconClassName="h-3.5 w-3.5" />
               {company.supervisorEmail && (
                 <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
                   <Mail className="h-3.5 w-3.5 shrink-0" />
@@ -204,6 +206,14 @@ export function CompanyCard({
                 </span>
               )}
             </div>
+          </div>
+
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">
+              Skills needed
+            </p>
+            <SkillChips skills={company.skills} collapseAfter={12}
+              emptyText="None listed yet. Add skills so this company is suggested to students." />
           </div>
 
           {company.description && (
@@ -266,27 +276,8 @@ export function CompanyCard({
                         {d.archived && <ArchivedBadge />}
                       </div>
 
-                      <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
-                        <span className="inline-flex items-center gap-1.5">
-                          <UserRound className="h-3 w-3 shrink-0" />
-                          {d.supervisorFullname || "Company's immediate supervisor"}
-                          {d.supervisorFullname && d.supervisorPosition
-                            ? ` · ${d.supervisorPosition}`
-                            : ""}
-                        </span>
-                        {d.supervisorContactNumber && (
-                          <span className="inline-flex items-center gap-1.5">
-                            <Phone className="h-3 w-3 shrink-0" />
-                            {d.supervisorContactNumber}
-                          </span>
-                        )}
-                        {d.supervisorEmail && (
-                          <span className="inline-flex items-center gap-1.5">
-                            <Mail className="h-3 w-3 shrink-0" />
-                            {d.supervisorEmail}
-                          </span>
-                        )}
-                      </div>
+                      <DepartmentSupervisorLines company={company} d={d} />
+
                     </div>
 
                     <div className="flex flex-wrap items-start gap-x-8 gap-y-3 lg:shrink-0">

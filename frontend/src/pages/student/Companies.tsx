@@ -1,16 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { Building2, CheckCircle2, Lock, MapPin, Phone } from "lucide-react";
+import { Building2, CheckCircle2, Lock, MapPin } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import type { StudentCompaniesData } from "@/types/studentProfile";
+import { ContactText } from "@/components/ContactText";
+import type { StudentCompaniesData, StudentCompanyDepartment } from "@/types/studentProfile";
 import type { CompanyOverview } from "@/types/companyApplications";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StudentSkillsEditor } from "@/components/skills/StudentSkillsEditor";
+import { SkillMatches } from "@/components/skills/SkillMatches";
+import { SkillChips } from "@/components/skills/SkillChips";
+import { skillKey } from "@/lib/skills";
 
 const PILL: Record<string, string> = {
   pending: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
@@ -48,6 +53,11 @@ export default function StudentCompanies() {
   const [assigned, setAssigned] = useState<boolean | null>(null);
   const [applying, setApplying] = useState<{ departmentId: number; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [skills, setSkills] = useState<string[] | null>(null);
+  const [highlight, setHighlight] = useState<number | null>(null);
+  const highlightTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(highlightTimer.current), []);
 
   const load = useCallback(() => {
     api
@@ -86,6 +96,27 @@ export default function StudentCompanies() {
   const maxApps = overview?.maxApplications ?? 3;
   const canApply = !!overview?.canApply;
   const atLimit = pendingCount >= maxApps;
+
+  const applyState = (d: StudentCompanyDepartment): "ok" | "pending" | "blocked" => {
+    if (!canApply) return "blocked";
+    if (pendingDepts.has(d.id)) return "pending";
+    if (atLimit || d.slots - d.filled <= 0) return "blocked";
+    return "ok";
+  };
+
+  // "View and apply": dalhin sa company sa listahan at i-highlight saglit
+  function viewCompany(id: number) {
+    const el = document.getElementById(`company-${id}`);
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    el.focus({ preventScroll: true });
+    setHighlight(id);
+    window.clearTimeout(highlightTimer.current);
+    highlightTimer.current = window.setTimeout(() => setHighlight(null), 2600);
+  }
+
+  const mine = new Set((skills ?? []).map(skillKey));
 
   async function apply() {
     if (!applying) return;
@@ -210,6 +241,28 @@ export default function StudentCompanies() {
         </section>
       )}
 
+      {data && !overview?.deployed && (
+        <StudentSkillsEditor
+          variant="bar"
+          className="mb-4"
+          title="Your skills"
+          description="We use these to suggest companies. Press Enter or a comma after each one."
+          endpoint="/student/skills"
+          searchUrl="/student/skills/search"
+          onSaved={setSkills}
+        />
+      )}
+
+      {data && skills !== null && !overview?.deployed && data.companies.length > 0 && (
+        <SkillMatches
+          companies={data.companies}
+          skills={skills}
+          applyState={applyState}
+          onView={viewCompany}
+          onApply={(c, d) => setApplying({ departmentId: d.id, label: d.name && d.name !== "N/A" ? `${c.name} – ${d.name}` : c.name })}
+        />
+      )}
+
       {!data && !error && (
         <div className="flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -232,8 +285,17 @@ export default function StudentCompanies() {
               You have {maxApps} pending applications. Cancel one to apply to another.
             </p>
           )}
+          <h2 className="text-sm font-semibold">All companies</h2>
           {data.companies.map((c) => (
-            <div key={c.id} className="rounded-xl border bg-card p-4">
+            <div
+              key={c.id}
+              id={`company-${c.id}`}
+              tabIndex={-1}
+              className={cn(
+                "scroll-mt-20 rounded-xl border bg-card p-4 outline-none transition-shadow duration-500",
+                highlight === c.id && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+              )}
+            >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <p className="font-medium">{c.name}</p>
               </div>
@@ -242,11 +304,23 @@ export default function StudentCompanies() {
                   <MapPin className="h-3 w-3" />
                   {c.address}
                 </span>
-                <span className="inline-flex items-center gap-1">
-                  <Phone className="h-3 w-3" />
-                  {c.contactNumber}
-                </span>
+                <ContactText value={c.contactNumber} className="gap-1" />
               </div>
+
+              {c.skills.length > 0 && (
+                <div className="mt-3">
+                  <p className="mb-1 text-xs text-muted-foreground">Skills needed</p>
+                  {mine.size === 0 ? (
+                    <SkillChips skills={c.skills} collapseAfter={6} />
+                  ) : (
+                    <SkillChips
+                      matched={c.skills.filter((s) => mine.has(skillKey(s)))}
+                      others={c.skills.filter((s) => !mine.has(skillKey(s)))}
+                      collapseAfter={6}
+                    />
+                  )}
+                </div>
+              )}
 
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {c.departments.map((d) => {

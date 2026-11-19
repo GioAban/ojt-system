@@ -1,6 +1,6 @@
 import { ShieldCheck } from "lucide-react";
 import { SUPERVISOR_PRIVACY_NOTE } from "@/lib/privacy";
-import type { SupervisorErrors, SupervisorValue } from "@/lib/company";
+import { CONTACT_HINT, CONTACT_MAX, type SupervisorErrors, type SupervisorValue } from "@/lib/company";
 import { Field } from "@/components/companies/parts";
 import { Input } from "@/components/ui/input";
 
@@ -12,6 +12,10 @@ interface SupervisorFieldsProps {
   value: SupervisorValue;
   errors: SupervisorErrors;
   onChange: (key: keyof SupervisorValue, value: string) => void;
+  /** Kailangan lahat (immediate supervisor ng company): may asterisk */
+  required?: boolean;
+  /** Walang guhit at padding sa itaas (kapag nasa sariling section na) */
+  bare?: boolean;
 }
 
 /**
@@ -25,9 +29,11 @@ export function SupervisorFields({
   value,
   errors,
   onChange,
+  required = false,
+  bare = false,
 }: SupervisorFieldsProps) {
   return (
-    <section className="flex flex-col gap-4 border-t pt-5">
+    <section className={bare ? "flex flex-col gap-4" : "flex flex-col gap-4 border-t pt-5"}>
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-medium">{title}</h3>
         <p className="text-xs text-muted-foreground">{description}</p>
@@ -48,7 +54,7 @@ export function SupervisorFields({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Full name" htmlFor={`${idPrefix}-name`} error={errors.name}>
+        <Field label="Full name" htmlFor={`${idPrefix}-name`} required={required} error={errors.name}>
           <Input
             id={`${idPrefix}-name`}
             maxLength={255}
@@ -58,7 +64,7 @@ export function SupervisorFields({
           />
         </Field>
 
-        <Field label="Position" htmlFor={`${idPrefix}-pos`} error={errors.position}>
+        <Field label="Position" htmlFor={`${idPrefix}-pos`} required={required} error={errors.position}>
           <Input
             id={`${idPrefix}-pos`}
             maxLength={255}
@@ -71,19 +77,20 @@ export function SupervisorFields({
         <Field
           label="Contact number"
           htmlFor={`${idPrefix}-contact`}
+          required={required}
           error={errors.contact}
+          hint={CONTACT_HINT}
         >
           <Input
             id={`${idPrefix}-contact`}
-            inputMode="tel"
-            maxLength={20}
+            maxLength={CONTACT_MAX}
             aria-invalid={Boolean(errors.contact)}
             value={value.contact}
             onChange={(e) => onChange("contact", e.target.value)}
           />
         </Field>
 
-        <Field label="Email" htmlFor={`${idPrefix}-email`} error={errors.email}>
+        <Field label="Email" htmlFor={`${idPrefix}-email`} required={required} error={errors.email}>
           <Input
             id={`${idPrefix}-email`}
             type="email"

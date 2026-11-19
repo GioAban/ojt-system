@@ -15,6 +15,8 @@ export interface CompanyInfoRow {
   supervisorName: string | null;
   supervisorPosition: string | null;
   startDate: string | null;
+  /** Saan isusulat ang pagbabago ng supervisor: sariling supervisor ng department, o immediate supervisor ng company */
+  supervisorEditTarget: "department" | "company";
 }
 
 export interface CompanyInfoData {

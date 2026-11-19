@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, Clock, Layers, Plus, Search, Users } from "lucide-react";
+import { Building2, Clock, Layers, Plus, Search, Sparkles, Users } from "lucide-react";
 import api from "@/lib/api";
 import { isApproved } from "@/lib/company";
 import { getErrorMessage } from "@/lib/errors";
@@ -24,6 +24,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTablePagination } from "@/components/DataTablePagination";
 import { CompanyCard } from "@/components/companies/CompanyCard";
 import { CompanyFormDialog } from "@/components/companies/CompanyFormDialog";
+import { SkillsManagerDialog } from "@/components/skills/SkillsManagerDialog";
 import { MoaFilesDialog } from "@/components/companies/MoaFilesDialog";
 import { CompanyListing } from "@/components/companies/CompanyListing";
 import { DepartmentFormDialog } from "@/components/companies/DepartmentFormDialog";
@@ -133,6 +134,7 @@ export default function HostTraining() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  const [skillsOpen, setSkillsOpen] = useState(false);
   const [companyForm, setCompanyForm] = useState<{
     company: CompanyItem | null;
   } | null>(null);
@@ -352,14 +354,20 @@ export default function HostTraining() {
             : "Companies and departments where your students train."
         }
         actions={
-          <Button
-            type="button"
-            disabled={semesterId === null}
-            onClick={() => setCompanyForm({ company: null })}
-          >
-            <Plus className="h-4 w-4" />
-            Add company
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => setSkillsOpen(true)}>
+              <Sparkles className="h-4 w-4" />
+              Skills
+            </Button>
+            <Button
+              type="button"
+              disabled={semesterId === null}
+              onClick={() => setCompanyForm({ company: null })}
+            >
+              <Plus className="h-4 w-4" />
+              Add company
+            </Button>
+          </div>
         }
       />
 
@@ -741,6 +749,7 @@ export default function HostTraining() {
         onConfirm={() => void handleConfirm()}
         onCancel={() => setConfirm(null)}
       />
+      <SkillsManagerDialog open={skillsOpen} onOpenChange={setSkillsOpen} />
     </DashboardLayout>
   );
 }

@@ -10,7 +10,9 @@ public final class CompanyInfoDtos {
             Long id, String studentNumber, String firstname, String lastname, String middleInitial,
             String subjectCode, Long companyId, String companyName, Long departmentId, String departmentName,
             String address, String contactNumber, String location,
-            String supervisorName, String supervisorPosition, String startDate) {}
+            String supervisorName, String supervisorPosition, String startDate,
+            /* Saan isusulat ang pagbabago ng supervisor: "department" o "company" (immediate supervisor) */
+            String supervisorEditTarget) {}
 
     public record CompanyInfoResponse(Long semesterId, List<CompanyInfoRow> students) {}
 
