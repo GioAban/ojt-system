@@ -89,6 +89,8 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(List.of(allowedOrigins));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
+        // Nababasa ng app (offline mode) kung nag-expire ang token
+        configuration.setExposedHeaders(List.of("X-Auth-Error"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

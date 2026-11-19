@@ -62,4 +62,5 @@ public class CoordinatorNotification {
     public String getLink() { return link; }
     public Timestamp getCreatedAt() { return createdAt; }
     public LocalDateTime getReadAt() { return readAt; }
+    public void setReadAt(LocalDateTime readAt) { this.readAt = readAt; }
 }

@@ -133,7 +133,29 @@ public class Student {
     @Column(name = "privacy_ack_version", length = 20)
     private String privacyAckVersion;
 
+    /**
+     * Kailangang kumpletuhin ng student ang profile sa unang login (mga nag-register sa link lang).
+     * null o false = hindi tatanungin (lahat ng dati nang student).
+     */
+    @Column(name = "profile_required")
+    private Boolean profileRequired;
+
+    /** Kailan kinumpleto ng student ang profile; isang beses lang itinatanong */
+    @Column(name = "profile_completed_at")
+    private java.time.LocalDateTime profileCompletedAt;
+
     private String otp;
+
+    /** Kailan inalis ng coordinator ang access (naka-archive din ang student); null = hindi */
+    @Column(name = "access_revoked_at")
+    private java.time.LocalDateTime accessRevokedAt;
+
+    @Column(name = "access_revoke_reason", length = 300)
+    private String accessRevokeReason;
+
+    /** Kailan na-reset ang password; ang JWT na mas luma rito ay hindi na tinatanggap. null = walang epekto */
+    @Column(name = "password_changed_at")
+    private java.time.LocalDateTime passwordChangedAt;
 
     @org.hibernate.annotations.CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -272,8 +294,26 @@ public class Student {
     public String getPrivacyAckVersion() { return privacyAckVersion; }
     public void setPrivacyAckVersion(String privacyAckVersion) { this.privacyAckVersion = privacyAckVersion; }
 
+    public Boolean getProfileRequired() { return profileRequired; }
+    public void setProfileRequired(Boolean profileRequired) { this.profileRequired = profileRequired; }
+
+    public java.time.LocalDateTime getProfileCompletedAt() { return profileCompletedAt; }
+    public void setProfileCompletedAt(java.time.LocalDateTime profileCompletedAt) { this.profileCompletedAt = profileCompletedAt; }
+
+    /** Kailangan pang kumpletuhin ang profile bago magamit ang app */
+    public boolean needsProfile() {
+        return Boolean.TRUE.equals(profileRequired) && profileCompletedAt == null;
+    }
+
     public String getOtp() { return otp; }
     public void setOtp(String otp) { this.otp = otp; }
+
+    public java.time.LocalDateTime getAccessRevokedAt() { return accessRevokedAt; }
+    public void setAccessRevokedAt(java.time.LocalDateTime accessRevokedAt) { this.accessRevokedAt = accessRevokedAt; }
+    public String getAccessRevokeReason() { return accessRevokeReason; }
+    public void setAccessRevokeReason(String accessRevokeReason) { this.accessRevokeReason = accessRevokeReason; }
+    public java.time.LocalDateTime getPasswordChangedAt() { return passwordChangedAt; }
+    public void setPasswordChangedAt(java.time.LocalDateTime passwordChangedAt) { this.passwordChangedAt = passwordChangedAt; }
 
     public Timestamp getCreatedAt() { return createdAt; }
     public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }

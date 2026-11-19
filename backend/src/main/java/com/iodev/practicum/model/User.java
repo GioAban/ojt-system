@@ -36,6 +36,10 @@ public class User {
     @Column(name = "remember_token", length = 100)
     private String rememberToken;
 
+    /** Kailan na-reset ang password; ang JWT na mas luma rito ay hindi na tinatanggap. null = walang epekto */
+    @Column(name = "password_changed_at")
+    private java.time.LocalDateTime passwordChangedAt;
+
     @org.hibernate.annotations.CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Timestamp createdAt;
@@ -73,6 +77,9 @@ public class User {
 
     public String getRememberToken() { return rememberToken; }
     public void setRememberToken(String rememberToken) { this.rememberToken = rememberToken; }
+
+    public java.time.LocalDateTime getPasswordChangedAt() { return passwordChangedAt; }
+    public void setPasswordChangedAt(java.time.LocalDateTime passwordChangedAt) { this.passwordChangedAt = passwordChangedAt; }
 
     public Timestamp getCreatedAt() { return createdAt; }
     public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }

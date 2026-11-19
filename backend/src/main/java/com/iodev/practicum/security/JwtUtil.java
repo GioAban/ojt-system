@@ -40,6 +40,11 @@ public class JwtUtil {
         return extractedEmail.equals(email) && !isTokenExpired(token);
     }
 
+    /** Kailan ginawa ang token; null kung wala */
+    public Date extractIssuedAt(String token) {
+        return extractClaim(token, claims -> claims.getIssuedAt());
+    }
+
     private boolean isTokenExpired(String token) {
         return extractClaim(token, claims -> claims.getExpiration()).before(new Date());
     }

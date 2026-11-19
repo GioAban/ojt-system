@@ -39,6 +39,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             token = authHeader.substring(7);
             try {
                 email = jwtUtil.extractEmail(token);
+            } catch (io.jsonwebtoken.ExpiredJwtException e) {
+                // Pareho pa rin ang sagot (hindi naka-login), pero alam ng app na nag-expire lang ang token
+                // para itabi ang ginagawa offline at hilinging mag-login ulit
+                response.setHeader("X-Auth-Error", "TOKEN_EXPIRED");
             } catch (Exception e) {
                 // Invalid token, ipapasa na lang sa filter chain, mare-reject sa ibang layer
             }
@@ -52,7 +56,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 // Lumang token ng account na wala na: ituring na hindi naka-login para hindi masira ang mga public page
             }
 
-            if (userDetails != null && userDetails.isEnabled() && jwtUtil.isTokenValid(token, email)) {
+            if (userDetails != null && userDetails.isEnabled() && jwtUtil.isTokenValid(token, email)
+                    && !issuedBeforePasswordChange(userDetails, token)) {
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
@@ -61,5 +66,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Token na ginawa bago na-reset ang password (password_changed_at). Segundo ang hinahambing dahil
+     * segundo lang ang iat ng JWT. null na password_changed_at = tinatanggap kagaya ng dati.
+     */
+    private boolean issuedBeforePasswordChange(UserDetails userDetails, String token) {
+        if (!(userDetails instanceof AccountDetails a) || a.getPasswordChangedAt() == null) return false;
+        java.util.Date issued = jwtUtil.extractIssuedAt(token);
+        if (issued == null) return true;
+        long changed = a.getPasswordChangedAt().atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+        return issued.getTime() / 1000 < changed;
     }
 }

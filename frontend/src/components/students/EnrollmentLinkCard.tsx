@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Copy, Download, Link2 } from "lucide-react";
+import { Copy, Download, Link2, Share2 } from "lucide-react";
 import api from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { notify } from "@/lib/notify";
@@ -25,7 +25,47 @@ function todayIso() {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
-/** Link at QR ng coordinator para sa semester na ito: bukas/sarado at due date */
+/** "Also require my approval": switch na may maikling paliwanag */
+function ApprovalSwitch({ checked, disabled, onChange }: { checked: boolean; disabled: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
+      <div className="min-w-0 flex-1">
+        <p id="approval-switch-label" className="text-sm font-medium">Also require my approval</p>
+        <p id="approval-switch-hint" className="mt-0.5 text-xs text-muted-foreground">
+          {checked
+            ? "On: after a student verifies their email, you approve the account in Needs approval."
+            : "Off: the account is created as soon as the student verifies their email. You can still revoke it."}{" "}
+          Turning this on is recommended when the link is shared in public groups.
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-labelledby="approval-switch-label"
+        aria-describedby="approval-switch-hint"
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          "disabled:cursor-not-allowed disabled:opacity-50",
+          checked ? "bg-primary" : "bg-muted-foreground/30",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            "inline-block h-5 w-5 rounded-full bg-background shadow transition-transform",
+            checked ? "translate-x-5" : "translate-x-0.5",
+          )}
+        />
+      </button>
+    </div>
+  );
+}
+
+/** Registration link at QR ng coordinator para sa semester na ito: bukas/sarado, due date, at bilang ng nag-register */
 export function EnrollmentLinkCard({ semesterId, state, failed, onChange }: Props) {
   const [dueDate, setDueDate] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -36,13 +76,14 @@ export function EnrollmentLinkCard({ semesterId, state, failed, onChange }: Prop
   const dueValue = dueDate ?? state?.dueDate ?? "";
   const dueChanged = dueDate !== null && dueDate !== (state?.dueDate ?? "");
 
-  async function save(next: { open?: boolean; due?: string }, message: string) {
+  async function save(next: { open?: boolean; due?: string; requireApproval?: boolean }, message: string) {
     setSaving(true);
     try {
       const res = await api.put<EnrollmentLinkState>(BASE, {
         semesterId,
         dueDate: (next.due ?? dueValue) || null,
         open: next.open ?? state?.open ?? true,
+        requireApproval: next.requireApproval ?? null,
       });
       onChange(res.data);
       setDueDate(null);
@@ -68,7 +109,7 @@ export function EnrollmentLinkCard({ semesterId, state, failed, onChange }: Prop
     }
   }
 
-  const url = state?.token ? `${window.location.origin}/claim?token=${state.token}` : "";
+  const url = state?.token ? `${window.location.origin}/join?token=${state.token}` : "";
 
   async function copy() {
     try {
@@ -79,6 +120,19 @@ export function EnrollmentLinkCard({ semesterId, state, failed, onChange }: Prop
     }
   }
 
+  // Sa phone: share sheet (Messenger, SMS...). Kung wala, kopyahin na lang.
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  async function share() {
+    try {
+      await navigator.share({ title: "OJT student registration", text: "Register for your OJT account here:", url });
+    } catch (err) {
+      // Kinansela ng user: walang gagawin
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      void copy();
+    }
+  }
+
   function downloadQr() {
     const svg = qrBox.current?.querySelector("svg");
     if (!svg) return;
@@ -86,7 +140,7 @@ export function EnrollmentLinkCard({ semesterId, state, failed, onChange }: Prop
     const href = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = href;
-    a.download = "enrollment-qr.svg";
+    a.download = "registration-qr.svg";
     a.click();
     URL.revokeObjectURL(href);
   }
@@ -94,7 +148,7 @@ export function EnrollmentLinkCard({ semesterId, state, failed, onChange }: Prop
   if (!state) {
     return (
       <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
-        {failed ? "Couldn't load the enrollment link. Retrying..." : "Loading..."}
+        {failed ? "Couldn't load the registration link. Retrying..." : "Loading..."}
       </div>
     );
   }
@@ -107,18 +161,18 @@ export function EnrollmentLinkCard({ semesterId, state, failed, onChange }: Prop
             <Link2 className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="font-semibold">Let your students request an account</h2>
+            <h2 className="font-semibold">Let your students register</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Create a link and QR code for this semester. Students enter their Student ID and email, then you accept them
-              below. Only you and your students for this semester can use it.
+              Create a link and QR code for this semester. Students fill in a short form, make their own password and
+              verify their email. Their account is then created, and you can review or revoke it below.
             </p>
             <div className="mt-4 flex flex-wrap items-end gap-3">
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium">Due date (optional)</span>
                 <Input type="date" min={todayIso()} value={dueValue} onChange={(e) => setDueDate(e.target.value)} className="w-44" />
               </label>
-              <Button type="button" disabled={saving} onClick={() => void save({ open: true }, "Enrollment link created.")}>
-                {saving ? "Creating..." : "Create enrollment link"}
+              <Button type="button" disabled={saving} onClick={() => void save({ open: true }, "Registration link created.")}>
+                {saving ? "Creating..." : "Create registration link"}
               </Button>
             </div>
           </div>
@@ -127,7 +181,7 @@ export function EnrollmentLinkCard({ semesterId, state, failed, onChange }: Prop
     );
   }
 
-  const label = !state.open ? "Stopped" : state.active ? "Accepting enrollment" : "Past due date";
+  const label = !state.open ? "Stopped" : state.active ? "Accepting registrations" : "Past due date";
   const pill = state.active
     ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
     : "bg-muted text-muted-foreground";
@@ -147,7 +201,7 @@ export function EnrollmentLinkCard({ semesterId, state, failed, onChange }: Prop
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <h2 className="font-semibold">Enrollment link</h2>
+              <h2 className="font-semibold">Registration link</h2>
               <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", pill)}>{label}</span>
             </div>
             <Button
@@ -156,19 +210,52 @@ export function EnrollmentLinkCard({ semesterId, state, failed, onChange }: Prop
               variant={state.open ? "outline" : "default"}
               disabled={saving}
               onClick={() =>
-                void save({ open: !state.open }, state.open ? "Enrollment stopped. The link won't accept requests." : "Enrollment is open again.")
+                void save({ open: !state.open }, state.open ? "Registration stopped. The link won't accept new students." : "Registration is open again.")
               }
             >
               {state.open ? "Stop accepting" : "Start accepting"}
             </Button>
           </div>
 
-          <div className="flex gap-2">
-            <Input readOnly value={url} aria-label="Enrollment link" onFocus={(e) => e.currentTarget.select()} />
-            <Button type="button" variant="outline" onClick={() => void copy()}>
-              <Copy className="h-4 w-4" /> Copy link
-            </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input readOnly value={url} aria-label="Registration link" onFocus={(e) => e.currentTarget.select()} />
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="flex-1 sm:flex-none" onClick={() => void copy()}>
+                <Copy className="h-4 w-4" /> Copy
+              </Button>
+              {canShare && (
+                <Button type="button" variant="outline" className="flex-1 sm:flex-none" onClick={() => void share()}>
+                  <Share2 className="h-4 w-4" /> Share
+                </Button>
+              )}
+            </div>
           </div>
+
+          <ApprovalSwitch
+            checked={state.requireApproval}
+            disabled={saving}
+            onChange={(on) =>
+              void save(
+                { requireApproval: on },
+                on
+                  ? "Approval turned on. Verified students will wait for you in Needs approval."
+                  : "Approval turned off. Accounts are created once students verify their email.",
+              )
+            }
+          />
+
+          <dl className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: "Awaiting email", value: state.awaitingEmail ?? 0, tone: "" },
+              { label: "Needs approval", value: state.pending, tone: state.pending > 0 ? "text-amber-600 dark:text-amber-400" : "" },
+              { label: "Accounts", value: state.verified, tone: "" },
+            ].map((c) => (
+              <div key={c.label} className="rounded-lg border bg-muted/30 px-2 py-1.5">
+                <dt className="text-[11px] text-muted-foreground">{c.label}</dt>
+                <dd className={cn("text-lg font-semibold tabular-nums", c.tone)}>{c.value}</dd>
+              </div>
+            ))}
+          </dl>
 
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex flex-col gap-1 text-sm">
@@ -203,7 +290,7 @@ export function EnrollmentLinkCard({ semesterId, state, failed, onChange }: Prop
                 <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => setConfirmRegen(true)}>
                   Create new link
                 </Button>
-                <span className="text-xs text-muted-foreground">Use this if the link was shared with the wrong people.</span>
+                <span className="text-xs text-muted-foreground">Use this if the link was shared with the wrong people. The old link stops working.</span>
               </>
             ) : (
               <>

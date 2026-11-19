@@ -3,20 +3,23 @@ import { useEffect, useState, type ReactNode } from "react";
 import axios from "axios";
 import api from "@/lib/api";
 import type { StudentProfile } from "@/types/studentProfile";
-import { isPasswordOk, markPasswordOk, rememberProfile } from "@/lib/studentSession";
+import { isPasswordOk, isProfileOk, markPasswordOk, markProfileOk, rememberProfile } from "@/lib/studentSession";
 import { isPrivacyOk, markPrivacyOk } from "@/lib/privacy";
 import { PrivacyAcknowledge } from "@/components/privacy/PrivacyAcknowledge";
+import { CompleteProfile } from "@/components/profile/CompleteProfile";
 
-type Gate = "checking" | "ok" | "change" | "privacy";
+type Gate = "checking" | "ok" | "change" | "privacy" | "profile";
 
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
   const token = localStorage.getItem("token");
   const isStudent = localStorage.getItem("role") === "STUDENT";
 
   // Ang student na default password pa ang gamit ay ipapalit muna bago makapasok kahit saan
-  // Pagkatapos nito, ipinapakilala ang Privacy Notice (isang beses, o kapag nagbago ang bersyon). Student lang.
-  const needsCheck = Boolean(token) && isStudent && (!isPasswordOk() || !isPrivacyOk());
+  // Pagkatapos nito, ipinapakilala ang Privacy Notice (isang beses, o kapag nagbago ang bersyon), at saka
+  // ang "Complete your profile" ng mga nag-register sa link (isang beses). Student lang; hindi sa staff.
+  const needsCheck = Boolean(token) && isStudent && (!isPasswordOk() || !isPrivacyOk() || !isProfileOk());
   const [gate, setGate] = useState<Gate>(needsCheck ? "checking" : "ok");
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
 
   useEffect(() => {
     if (!needsCheck) return;
@@ -27,14 +30,20 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
       .then((res) => {
         if (cancelled) return;
         rememberProfile(res.data);
+        setProfile(res.data);
         if (res.data.mustChangePassword) {
           setGate("change");
         } else if (!res.data.privacyAcknowledged) {
           markPasswordOk();
           setGate("privacy");
+        } else if (res.data.profileRequired) {
+          markPasswordOk();
+          markPrivacyOk();
+          setGate("profile");
         } else {
           markPasswordOk();
           markPrivacyOk();
+          markProfileOk();
           setGate("ok");
         }
       })
@@ -95,6 +104,23 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
       <PrivacyAcknowledge
         onDone={() => {
           markPrivacyOk();
+          if (profile?.profileRequired) {
+            setGate("profile");
+          } else {
+            markProfileOk();
+            setGate("ok");
+          }
+        }}
+      />
+    );
+  }
+
+  if (gate === "profile" && profile) {
+    return (
+      <CompleteProfile
+        profile={profile}
+        onDone={() => {
+          markProfileOk();
           setGate("ok");
         }}
       />

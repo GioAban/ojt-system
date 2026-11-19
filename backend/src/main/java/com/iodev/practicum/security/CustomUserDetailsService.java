@@ -29,12 +29,10 @@ public class CustomUserDetailsService implements UserDetailsService {
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         User user = userRepository.findByEmail(email).orElse(null);
         if (user != null) {
-            return org.springframework.security.core.userdetails.User
-                    .withUsername(user.getEmail())
-                    .password(user.getPassword())
-                    .authorities(new SimpleGrantedAuthority("ROLE_" + user.getRoleAs().name()))
-                    .disabled(Boolean.TRUE.equals(user.getIsArchived()))
-                    .build();
+            return new AccountDetails(user.getEmail(), user.getPassword(),
+                    !Boolean.TRUE.equals(user.getIsArchived()),
+                    List.of(new SimpleGrantedAuthority("ROLE_" + user.getRoleAs().name())),
+                    user.getPasswordChangedAt());
         }
 
         Director director = directorRepository.findByEmail(email).orElse(null);
@@ -48,11 +46,9 @@ public class CustomUserDetailsService implements UserDetailsService {
 
         Student student = studentRepository.findByEmail(email).orElse(null);
         if (student != null && !Boolean.TRUE.equals(student.getIsArchived())) {
-            return new org.springframework.security.core.userdetails.User(
-                    student.getEmail(),
-                    student.getPassword(),
-                    List.of(new SimpleGrantedAuthority("ROLE_STUDENT"))
-            );
+            return new AccountDetails(student.getEmail(), student.getPassword(), true,
+                    List.of(new SimpleGrantedAuthority("ROLE_STUDENT")),
+                    student.getPasswordChangedAt());
         }
 
         throw new UsernameNotFoundException("No account found with email: " + email);

@@ -36,6 +36,13 @@ public class EnrollmentLink {
     @Column(name = "is_open", nullable = false)
     private boolean open = true;
 
+    /**
+     * "Also require my approval": kapag true, ang na-verify na email ay pupunta pa sa Pending ng coordinator.
+     * null o false = awtomatikong nagagawa ang account pagka-verify ng email.
+     */
+    @Column(name = "require_approval")
+    private Boolean requireApproval;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -58,4 +65,6 @@ public class EnrollmentLink {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void touch() { this.updatedAt = LocalDateTime.now(); }
+    public boolean isRequireApproval() { return Boolean.TRUE.equals(requireApproval); }
+    public void setRequireApproval(Boolean requireApproval) { this.requireApproval = requireApproval; }
 }

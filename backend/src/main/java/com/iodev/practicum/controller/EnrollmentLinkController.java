@@ -1,42 +1,29 @@
 package com.iodev.practicum.controller;
 
-import com.iodev.practicum.dto.StudentManagementDtos.AcceptAllResult;
-import com.iodev.practicum.dto.StudentManagementDtos.AccountRow;
-import com.iodev.practicum.dto.StudentManagementDtos.ApprovalResult;
-import com.iodev.practicum.dto.StudentManagementDtos.BulkRequestIds;
 import com.iodev.practicum.dto.StudentManagementDtos.EnrollmentLinkRequest;
 import com.iodev.practicum.dto.StudentManagementDtos.EnrollmentLinkState;
 import com.iodev.practicum.model.Coordinator;
 import com.iodev.practicum.model.EnrollmentLink;
-import com.iodev.practicum.model.EnrollmentRequest;
 import com.iodev.practicum.model.Semester;
-import com.iodev.practicum.model.Student;
+import com.iodev.practicum.model.StudentRegistration;
 import com.iodev.practicum.repository.CoordinatorRepository;
 import com.iodev.practicum.repository.EnrollmentLinkRepository;
-import com.iodev.practicum.repository.EnrollmentRequestRepository;
-import com.iodev.practicum.repository.StudentManagementRepository;
-import com.iodev.practicum.util.DefaultPassword;
+import com.iodev.practicum.repository.StudentRegistrationRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.SecureRandom;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.Base64;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
-/** Ang coordinator ang gumagawa, nagbubukas, nagsasara, at nagpapalit ng enrollment link */
+/** Ang coordinator ang gumagawa, nagbubukas, nagsasara, at nagpapalit ng registration link */
 @RestController
 @RequestMapping("/api/coordinator/student-management/enrollment")
 public class EnrollmentLinkController {
@@ -46,9 +33,7 @@ public class EnrollmentLinkController {
 
     @Autowired private CoordinatorRepository coordinatorRepository;
     @Autowired private EnrollmentLinkRepository links;
-    @Autowired private StudentManagementRepository students;
-    @Autowired private EnrollmentRequestRepository requests;
-    @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private StudentRegistrationRepository registrations;
     @PersistenceContext private EntityManager em;
 
     @GetMapping
@@ -88,6 +73,7 @@ public class EnrollmentLinkController {
         }
         link.setDueDate(due);
         if (r.open() != null) link.setOpen(r.open());
+        if (r.requireApproval() != null) link.setRequireApproval(r.requireApproval());
         link.touch();
         links.save(link);
 
@@ -111,159 +97,6 @@ public class EnrollmentLinkController {
     }
 
     // ---------------------------------------------------------------------
-    // Accounts tab: listahan, accept, reject
-    // ---------------------------------------------------------------------
-
-    /** Lahat ng hindi-archived na student ng coordinator sa semester, may status ng account */
-    @GetMapping("/accounts")
-    @Transactional(readOnly = true)
-    public ResponseEntity<?> accounts(@RequestParam Long semesterId, Authentication authentication) {
-        Coordinator coordinator = current(authentication);
-        if (coordinator == null) return noProfile();
-
-        Map<Long, EnrollmentRequest> pending = new HashMap<>();
-        for (EnrollmentRequest r : requests.findPending(coordinator.getId(), semesterId)) {
-            pending.put(r.getStudent().getId(), r);
-        }
-
-        List<AccountRow> rows = new ArrayList<>();
-        for (Student s : students.findForManagement(coordinator.getId(), semesterId)) {
-            if (Boolean.TRUE.equals(s.getIsArchived())) continue;
-            boolean active = s.getEmail() != null && !s.getEmail().isBlank();
-            EnrollmentRequest req = active ? null : pending.get(s.getId());
-            String status = active ? "active" : req != null ? "pending" : "none";
-            rows.add(new AccountRow(
-                    s.getId(),
-                    req == null ? null : req.getId(),
-                    s.getStudentNumber(), s.getLastname(), s.getFirstname(), s.getMiddleInitial(), s.getYear(),
-                    active ? s.getEmail() : req == null ? null : req.getEmail(),
-                    status,
-                    req == null ? null : req.getCreatedAt().toString(),
-                    active && Boolean.TRUE.equals(s.getMustChangePassword())));
-        }
-        return ResponseEntity.ok(rows);
-    }
-
-    /** I-accept ang hiling: gagawa ng account na ang password ay default (ID + initials) */
-    @PostMapping("/requests/{id}/accept")
-    @Transactional
-    public ResponseEntity<?> accept(@PathVariable Long id, Authentication authentication) {
-        Coordinator coordinator = current(authentication);
-        if (coordinator == null) return noProfile();
-
-        EnrollmentRequest req = requests.findById(id).orElse(null);
-        if (req == null || !req.getCoordinator().getId().equals(coordinator.getId())) {
-            return ResponseEntity.status(404).body("Request not found.");
-        }
-        String problem = approve(req);
-        if (problem != null) return ResponseEntity.status(409).body(problem);
-
-        Student s = req.getStudent();
-        return ResponseEntity.ok(new ApprovalResult(
-                s.getId(), s.getLastname() + ", " + s.getFirstname(), req.getEmail(), DefaultPassword.of(s)));
-    }
-
-    /** I-accept lahat ng nakabinbin; ang may problema (hal. email na gamit na) ay nilalaktawan */
-    @PostMapping("/requests/accept-all")
-    @Transactional
-    public ResponseEntity<?> acceptAll(@RequestParam Long semesterId, Authentication authentication) {
-        Coordinator coordinator = current(authentication);
-        if (coordinator == null) return noProfile();
-
-        int accepted = 0, skipped = 0;
-        for (EnrollmentRequest req : requests.findPending(coordinator.getId(), semesterId)) {
-            if (approve(req) == null) accepted++;
-            else skipped++;
-        }
-        return ResponseEntity.ok(new AcceptAllResult(accepted, skipped));
-    }
-
-    /** I-accept ang mga piniling hiling; ang may problema ay nilalaktawan. accepted = bilang na na-accept */
-    @PostMapping("/requests/bulk-accept")
-    @Transactional
-    public ResponseEntity<?> bulkAccept(@RequestBody BulkRequestIds body, Authentication authentication) {
-        Coordinator coordinator = current(authentication);
-        if (coordinator == null) return noProfile();
-        int done = 0, skipped = 0;
-        for (EnrollmentRequest req : ownRequests(body, coordinator)) {
-            if (approve(req) == null) done++;
-            else skipped++;
-        }
-        return ResponseEntity.ok(new AcceptAllResult(done, skipped));
-    }
-
-    /** I-reject ang mga piniling hiling. accepted = bilang na na-reject (parehong hugis ng resulta) */
-    @PostMapping("/requests/bulk-reject")
-    @Transactional
-    public ResponseEntity<?> bulkReject(@RequestBody BulkRequestIds body, Authentication authentication) {
-        Coordinator coordinator = current(authentication);
-        if (coordinator == null) return noProfile();
-        int done = 0, skipped = 0;
-        for (EnrollmentRequest req : ownRequests(body, coordinator)) {
-            if (!EnrollmentRequest.PENDING.equals(req.getStatus())) {
-                skipped++;
-                continue;
-            }
-            req.setStatus(EnrollmentRequest.REJECTED);
-            req.setDecidedAt(LocalDateTime.now());
-            requests.save(req);
-            done++;
-        }
-        return ResponseEntity.ok(new AcceptAllResult(done, skipped));
-    }
-
-    /** Mga request na pag-aari ng coordinator na ito lamang; ang iba ay hindi pinapansin */
-    private List<EnrollmentRequest> ownRequests(BulkRequestIds body, Coordinator coordinator) {
-        List<EnrollmentRequest> own = new ArrayList<>();
-        if (body == null || body.requestIds() == null) return own;
-        for (Long id : body.requestIds().stream().filter(java.util.Objects::nonNull).distinct().limit(1000).toList()) {
-            EnrollmentRequest req = requests.findById(id).orElse(null);
-            if (req != null && req.getCoordinator().getId().equals(coordinator.getId())) own.add(req);
-        }
-        return own;
-    }
-
-    @PostMapping("/requests/{id}/reject")
-    @Transactional
-    public ResponseEntity<?> reject(@PathVariable Long id, Authentication authentication) {
-        Coordinator coordinator = current(authentication);
-        if (coordinator == null) return noProfile();
-
-        EnrollmentRequest req = requests.findById(id).orElse(null);
-        if (req == null || !req.getCoordinator().getId().equals(coordinator.getId())) {
-            return ResponseEntity.status(404).body("Request not found.");
-        }
-        if (!EnrollmentRequest.PENDING.equals(req.getStatus())) {
-            return ResponseEntity.status(409).body("This request was already handled.");
-        }
-        req.setStatus(EnrollmentRequest.REJECTED);
-        req.setDecidedAt(LocalDateTime.now());
-        requests.save(req);
-        return ResponseEntity.ok().build();
-    }
-
-    /** Ibinabalik ang dahilan kung hindi puwede; null kung na-accept */
-    private String approve(EnrollmentRequest req) {
-        if (!EnrollmentRequest.PENDING.equals(req.getStatus())) return "This request was already handled.";
-        Student s = req.getStudent();
-        if (Boolean.TRUE.equals(s.getIsArchived())) return "This student is archived. Restore the student first.";
-        if (s.getEmail() != null && !s.getEmail().isBlank()) return "This student already has an account.";
-        if (students.emailExists(req.getEmail())) return "That email is already used by another account. Reject this request.";
-
-        s.setEmail(req.getEmail());
-        s.setPassword(passwordEncoder.encode(DefaultPassword.of(s)));
-        s.setTemporaryPassword(null);
-        s.setIsVerified(true);
-        s.setMustChangePassword(true);
-        students.save(s);
-
-        req.setStatus(EnrollmentRequest.APPROVED);
-        req.setDecidedAt(LocalDateTime.now());
-        requests.save(req);
-        return null;
-    }
-
-    // ---------------------------------------------------------------------
 
     public static boolean isActive(EnrollmentLink link) {
         if (!link.isOpen()) return false;
@@ -271,21 +104,32 @@ public class EnrollmentLinkController {
     }
 
     private EnrollmentLinkState state(Coordinator coordinator, Long semesterId, EnrollmentLink link) {
-        long total = 0, registered = 0;
-        for (Student s : students.findForManagement(coordinator.getId(), semesterId)) {
-            if (Boolean.TRUE.equals(s.getIsArchived())) continue;
-            total++;
-            if (s.getEmail() != null && !s.getEmail().isBlank()) registered++;
+        long pending = 0, verified = 0, rejected = 0, awaitingEmail = 0, revoked = 0;
+        for (Object[] row : registrations.countByStatus(coordinator.getId(), semesterId)) {
+            long n = ((Number) row[1]).longValue();
+            switch (String.valueOf(row[0])) {
+                case StudentRegistration.PENDING -> pending = n;
+                case StudentRegistration.VERIFIED -> verified = n;
+                case StudentRegistration.REJECTED -> rejected = n;
+                case StudentRegistration.EMAIL_PENDING -> awaitingEmail = n;
+                case StudentRegistration.REVOKED -> revoked = n;
+                default -> { }
+            }
         }
-        long pending = requests.countPending(coordinator.getId(), semesterId);
-        if (link == null) return new EnrollmentLinkState(false, null, false, null, false, registered, total, pending);
+        long total = pending + verified + rejected + awaitingEmail + revoked;
+        if (link == null) {
+            return new EnrollmentLinkState(false, null, false, null, false, pending, verified, rejected, total,
+                    false, awaitingEmail, revoked);
+        }
         return new EnrollmentLinkState(true, link.getToken(), link.isOpen(),
                 link.getDueDate() == null ? null : link.getDueDate().toString(),
-                isActive(link), registered, total, pending);
+                isActive(link), pending, verified, rejected, total,
+                link.isRequireApproval(), awaitingEmail, revoked);
     }
 
+    /** 32 random bytes (~43 characters): hindi mahuhulaan */
     private String newToken() {
-        byte[] bytes = new byte[24];
+        byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }

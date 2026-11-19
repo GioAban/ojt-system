@@ -18,6 +18,8 @@ import java.util.List;
 /**
  * Pinipilit ang student na magpalit ng password: habang "must change password" pa,
  * lahat ng /api/** (maliban sa change-password at auth) ay 403 na may code PASSWORD_CHANGE_REQUIRED.
+ * Pagkatapos nito, ang nag-register sa link na hindi pa kumpleto ang profile ay 403 PROFILE_REQUIRED
+ * (maliban sa profile/complete at privacy/acknowledge).
  *
  * HUWAG lagyan ng @Component: kapag bean ito, ilalagay ito ng Spring Boot BAGO ang security
  * at hindi pa alam kung sino ang naka-login. Idagdag ito sa SecurityConfig, pagkatapos ng JwtAuthFilter:
@@ -52,12 +54,28 @@ public class PasswordChangeRequiredFilter extends OncePerRequestFilter {
         if (auth != null && auth.isAuthenticated() && !(auth instanceof AnonymousAuthenticationToken)) {
             List<Student> found = students.findByEmail(auth.getName());
             if (!found.isEmpty() && Boolean.TRUE.equals(found.get(0).getMustChangePassword())) {
-                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                response.setContentType("text/plain;charset=UTF-8");
-                response.getOutputStream().write("PASSWORD_CHANGE_REQUIRED".getBytes(StandardCharsets.UTF_8));
+                deny(response, "PASSWORD_CHANGE_REQUIRED");
+                return;
+            }
+            // Nag-register sa link: kumpletuhin muna ang profile (isang beses lang)
+            if (!found.isEmpty() && found.get(0).needsProfile() && !profileExempt(request)) {
+                deny(response, "PROFILE_REQUIRED");
                 return;
             }
         }
         chain.doFilter(request, response);
+    }
+
+    /** Mga endpoint na kailangan ng "Complete your profile" screen mismo */
+    private static boolean profileExempt(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.equals("/api/student/profile/complete")
+                || path.equals("/api/student/privacy/acknowledge");
+    }
+
+    private static void deny(HttpServletResponse response, String code) throws IOException {
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType("text/plain;charset=UTF-8");
+        response.getOutputStream().write(code.getBytes(StandardCharsets.UTF_8));
     }
 }

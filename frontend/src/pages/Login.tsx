@@ -1,8 +1,12 @@
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import api from "@/lib/api";
 import { LoginForm } from "@/components/login/LoginForm";
 import { LoginLayout } from "@/components/login/LoginLayout";
+import { setAuthExpired } from "@/offline/connection";
+import { deleteCachedForOwner } from "@/offline/db";
+import { setSharedDevice } from "@/offline/session";
+import { refreshSyncSummary } from "@/offline/syncSummary";
 
 const LOGIN_ENDPOINTS = [
   "/auth/login",
@@ -16,13 +20,15 @@ function homeFor(role: string | null) {
 
 export default function Login() {
   const navigate = useNavigate();
+  // Galing sa "Log in again" (nag-expire ang login): ang datos sa device ay naghihintay pa
+  const relogin = Boolean((useLocation().state as { relogin?: boolean } | null)?.relogin);
 
   if (localStorage.getItem("token")) {
     return <Navigate to={homeFor(localStorage.getItem("role"))} replace />;
   }
 
   // identifier = email O Student ID. Ipinapasa sa "email" field; ang backend ang nagre-resolve.
-  async function handleLogin(identifier: string, password: string) {
+  async function handleLogin(identifier: string, password: string, shared: boolean) {
     let blockedMessage = "";
     let sawNetworkError = false;
 
@@ -34,6 +40,11 @@ export default function Login() {
         localStorage.setItem("fullname", response.data.fullname);
         localStorage.setItem("role", response.data.role);
         localStorage.setItem("coordinatorType", response.data.coordinatorType ?? "");
+        // Offline mode: "This is a shared computer" = walang itatabi sa device sa session na ito
+        setSharedDevice(shared);
+        if (shared) void deleteCachedForOwner(String(response.data.email ?? "").toLowerCase());
+        setAuthExpired(false);
+        void refreshSyncSummary();
         // Kapag default password pa ang gamit ng student, ipapalit muna
         if (response.data.mustChangePassword) {
           navigate("/change-password", { replace: true });
@@ -62,7 +73,10 @@ export default function Login() {
 
   return (
     <LoginLayout>
-      <LoginForm onSubmit={handleLogin} />
+      <LoginForm
+        onSubmit={handleLogin}
+        notice={relogin ? "Your session expired. Log in again with the same account to send the changes saved on this device." : undefined}
+      />
     </LoginLayout>
   );
 }

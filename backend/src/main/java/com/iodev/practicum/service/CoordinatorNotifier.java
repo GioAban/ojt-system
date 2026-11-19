@@ -22,6 +22,33 @@ public class CoordinatorNotifier {
         return base + refId + "/submissions?student=" + studentId;
     }
 
+    /** Abiso na wala pang Student (hal. bagong registration na hinihintay ma-verify) */
+    public void toCoordinator(Long coordinatorId, String type, String title, String message, String link) {
+        try {
+            if (coordinatorId == null) return;
+            repository.save(new CoordinatorNotification(coordinatorId, null, type, title, message, link));
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(CoordinatorNotifier.class)
+                    .warn("Couldn't save the coordinator notification", e);
+        }
+    }
+
+    /**
+     * Tahimik na abiso: lumalabas sa listahan ng bell pero hindi dinadagdagan ang bilang ng hindi pa nababasa
+     * (hal. "New student registered" kapag awtomatikong nagawa ang account).
+     */
+    public void quietToCoordinator(Long coordinatorId, String type, String title, String message, String link) {
+        try {
+            if (coordinatorId == null) return;
+            CoordinatorNotification n = new CoordinatorNotification(coordinatorId, null, type, title, message, link);
+            n.setReadAt(java.time.LocalDateTime.now());
+            repository.save(n);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(CoordinatorNotifier.class)
+                    .warn("Couldn't save the coordinator notification", e);
+        }
+    }
+
     public void fromStudent(Student student, String type, String title, String message, String link) {
         try {
             if (student == null || student.getCoordinator() == null) return;
