@@ -11,6 +11,7 @@ import type { ApprovalResult, StudentDetail, StudentRow } from "@/types/students
 import { CredentialsCard } from "@/components/students/CredentialsCard";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ConfirmedEmailCell } from "./ConfirmedEmailCell";
+import { StudentSkillsEditor } from "@/components/skills/StudentSkillsEditor";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -280,7 +281,7 @@ export function StudentDrawer({ studentId, onClose, onRowChange }: Props) {
                   )}
                 </EditItem>
                 <EditItem label="Contact">
-                  <EditableCell value={d.student.contact} label="Contact" maxLength={20} validate={validOptionalPhone} onSave={(v) => saveField("contact", v)} />
+                  <EditableCell value={d.student.contact} label="Contact" maxLength={255} validate={validOptionalPhone} onSave={(v) => saveField("contact", v)} />
                 </EditItem>
                 <EditItem label="Birthday (YYYY-MM-DD)">
                   <EditableCell value={d.student.birthday ? d.student.birthday.slice(0, 10) : ""} label="Birthday" maxLength={10} onSave={(v) => saveField("birthday", v)} />
@@ -295,6 +296,16 @@ export function StudentDrawer({ studentId, onClose, onRowChange }: Props) {
                   <EditableCell value={d.student.address} label="Address" maxLength={255} onSave={(v) => saveField("address", v)} />
                 </EditItem>
               </Section>
+
+              <section className="border-t pt-4">
+                <StudentSkillsEditor
+                  key={d.student.id}
+                  variant="plain"
+                  endpoint={`/coordinator/skills/students/${d.student.id}`}
+                  searchUrl="/coordinator/skills/search"
+                  description="Used to suggest companies to this student. Press Enter or a comma after each one."
+                />
+              </section>
 
               {Object.keys(d.requirements).length > 0 && (
                 <Section title="Requirements">

@@ -6,6 +6,7 @@ import { rememberProfile } from "@/lib/studentSession";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import ComingSoon from "@/pages/ComingSoon";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StudentSkillsEditor } from "@/components/skills/StudentSkillsEditor";
 
 function formatHours(value: number | null) {
   if (value === null || value === undefined) return "—";
@@ -62,6 +63,14 @@ function StudentProfileView() {
             ))}
           </CardContent>
         </Card>
+      )}
+      {profile && (
+        <StudentSkillsEditor
+          className="mt-4"
+          endpoint="/student/skills"
+          searchUrl="/student/skills/search"
+          description="Add what you can do, like Excel, Photoshop or Customer service. These help match you with companies."
+        />
       )}
     </DashboardLayout>
   );

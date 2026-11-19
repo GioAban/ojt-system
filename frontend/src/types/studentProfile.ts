@@ -16,6 +16,21 @@ export interface StudentProfile {
   mustChangePassword: boolean;
   /** Nakilala na ang kasalukuyang bersyon ng Privacy Notice */
   privacyAcknowledged: boolean;
+  /** Nag-register sa link at hindi pa kinukumpleto ang profile */
+  profileRequired: boolean;
+  details: StudentProfileDetails;
+}
+
+export interface StudentProfileDetails {
+  middleInitial: string | null;
+  gender: string | null;
+  year: string | null;
+  course: string | null;
+  contact: string | null;
+  birthday: string | null;
+  address: string | null;
+  parent: string | null;
+  guardian: string | null;
 }
 
 export interface StudentCompanyDepartment {
@@ -33,6 +48,7 @@ export interface StudentCompany {
   contactNumber: string;
   nature: string | null;
   departments: StudentCompanyDepartment[];
+  skills: string[];
 }
 
 export interface StudentCompaniesData {

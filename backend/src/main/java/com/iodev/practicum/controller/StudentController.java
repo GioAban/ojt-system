@@ -1,5 +1,6 @@
 package com.iodev.practicum.controller;
 
+import com.iodev.practicum.service.SupervisorResolver;
 import com.iodev.practicum.dto.StudentProfileResponse;
 import com.iodev.practicum.model.Student;
 import com.iodev.practicum.repository.StudentRepository;
@@ -43,7 +44,7 @@ public class StudentController {
         r.setCoordinatorName(s.getCoordinator().getUser().getFullname());
 
         if (s.getDepartment() != null) {
-            r.setDepartmentName(s.getDepartment().getName());
+            r.setDepartmentName(SupervisorResolver.departmentLabel(s.getDepartment().getName()));
             r.setCompanyName(s.getDepartment().getCompany().getName());
         }
 

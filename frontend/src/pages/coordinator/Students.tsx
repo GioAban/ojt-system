@@ -4,12 +4,11 @@ import {
   Archive,
   ArchiveRestore,
   Eye,
-  KeyRound,
   QrCode,
   SlidersHorizontal,
   Plus,
   Search,
-  Upload,
+  UserPlus,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -35,8 +34,7 @@ import { DataTablePagination } from "@/components/DataTablePagination";
 import { StatCard } from "@/components/companies/parts";
 import { EditableCell } from "@/components/tracking/EditableCell";
 import { AddStudentPanel } from "@/components/students/AddStudentPanel";
-import { AccountsTab } from "@/components/students/AccountsTab";
-import { ImportDialog } from "@/components/students/ImportDialog";
+import { PendingRegistrationsTab } from "@/components/students/PendingRegistrationsTab";
 import { SelectCell } from "@/components/students/SelectCell";
 import { StudentDrawer } from "@/components/students/StudentDrawer";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -162,12 +160,21 @@ export default function Students() {
 
   const [showEmail, setShowEmail] = useState(false);
   const [showContact, setShowContact] = useState(false);
-  const [tab, setTab] = useState<"students" | "accounts">("students");
-  const [pendingCount, setPendingCount] = useState(0);
-  const [adding, setAdding] = useState(false);
-  const [importing, setImporting] = useState(false);
   // ?student=ID (hal. galing sa Dashboard) ay agad nagbubukas ng detalye ng student
   const [searchParams, setSearchParams] = useSearchParams();
+  // ?tab=registrations (hal. galing sa notification) ay agad nagbubukas ng Pending registrations
+  const [tab, setTab] = useState<"students" | "registrations">(() =>
+    searchParams.get("tab") === "registrations" ? "registrations" : "students",
+  );
+  // Kapag nasa page na at pinindot ulit ang notification
+  const tabParam = searchParams.get("tab");
+  const [seenTabParam, setSeenTabParam] = useState(tabParam);
+  if (tabParam !== seenTabParam) {
+    setSeenTabParam(tabParam);
+    if (tabParam === "registrations") setTab("registrations");
+  }
+  const [pendingCount, setPendingCount] = useState(0);
+  const [adding, setAdding] = useState(false);
   const [viewId, setViewId] = useState<number | null>(() => {
     const fromLink = Number(searchParams.get("student"));
     return Number.isInteger(fromLink) && fromLink > 0 ? fromLink : null;
@@ -294,9 +301,9 @@ export default function Students() {
               type="button"
               variant="outline"
               disabled={semesterId === null}
-              onClick={() => setImporting(true)}
+              onClick={() => setTab("registrations")}
             >
-              <Upload className="h-4 w-4" /> Import
+              <QrCode className="h-4 w-4" /> Registration link
             </Button>
             <Button
               type="button"
@@ -340,10 +347,10 @@ export default function Students() {
               <Users className="h-4 w-4" /> Students
             </TabButton>
             <TabButton
-              active={tab === "accounts"}
-              onClick={() => setTab("accounts")}
+              active={tab === "registrations"}
+              onClick={() => setTab("registrations")}
             >
-              <KeyRound className="h-4 w-4" /> Accounts
+              <UserPlus className="h-4 w-4" /> Pending registrations
               {pendingCount > 0 && (
                 <span
                   className="rounded-full bg-amber-500 px-1.5 text-xs font-medium text-white"
@@ -517,7 +524,7 @@ export default function Students() {
                 {filtered.length === 0 ? (
                   <p className="rounded-xl border bg-card py-16 text-center text-sm text-muted-foreground">
                     {students.length === 0
-                      ? "No students yet. Add one or import a file."
+                      ? "No students yet. Share your registration link, or add a student."
                       : "No students match your filters."}
                   </p>
                 ) : (
@@ -691,8 +698,7 @@ export default function Students() {
                                 <EditableCell
                                   value={s.contact}
                                   label="Contact"
-                                  kind="tel"
-                                  maxLength={20}
+                                  maxLength={255}
                                   validate={validOptionalPhone}
                                   onSave={(v) => save(s, "contact", v)}
                                 />
@@ -783,21 +789,15 @@ export default function Students() {
             )}
           </div>
 
-          <div className={tab === "accounts" ? undefined : "hidden"}>
-            <AccountsTab
+          <div className={tab === "registrations" ? undefined : "hidden"}>
+            <PendingRegistrationsTab
+              key={semesterId}
               semesterId={semesterId}
-              visible={tab === "accounts"}
+              visible={tab === "registrations"}
               onPendingChange={setPendingCount}
-              onChanged={() => void refresh()}
+              onVerified={() => void refresh()}
             />
           </div>
-
-          <ImportDialog
-            open={importing}
-            semesterId={semesterId}
-            onOpenChange={setImporting}
-            onImported={() => void refresh()}
-          />
         </>
       )}
 

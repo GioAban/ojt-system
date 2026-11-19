@@ -3,6 +3,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { SemesterSwitcher } from "@/components/SemesterSwitcher";
 import { NotificationBell } from "@/components/NotificationBell";
 import { UserMenu } from "@/components/UserMenu";
+import { ConnectionStatus } from "@/components/offline/ConnectionStatus";
 import { cn } from "@/lib/utils";
 
 /** Petsa at oras na gumagalaw; hiwalay na component para ito lang ang nagre-render kada segundo */
@@ -49,6 +50,7 @@ export function TopNav() {
 
       <div className="flex min-w-0 items-center gap-1 sm:gap-3">
         {showSemester && <SemesterSwitcher />}
+        <ConnectionStatus />
         <NotificationBell />
         <UserMenu variant="topnav" />
       </div>

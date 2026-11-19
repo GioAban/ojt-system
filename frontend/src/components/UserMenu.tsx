@@ -1,5 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { ChevronsUpDown, LogOut, Settings, User } from "lucide-react";
+import { useSafeLogout } from "@/hooks/useSafeLogout";
+import { LogoutDialog } from "@/components/offline/LogoutDialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -26,10 +28,8 @@ export function UserMenu({ variant = "sidebar" }: UserMenuProps) {
     .join("")
     .toUpperCase();
 
-  const handleLogout = () => {
-    localStorage.clear();
-    navigate("/login", { replace: true });
-  };
+  // Binubura ang datos ng user sa device; nagtatanong muna kapag may hindi pa naipapadala
+  const logout = useSafeLogout();
 
   const isSidebar = variant === "sidebar";
 
@@ -88,12 +88,13 @@ export function UserMenu({ variant = "sidebar" }: UserMenuProps) {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="gap-2 text-destructive focus:text-destructive"
-          onClick={handleLogout}
+          onClick={logout.request}
         >
           <LogOut className="h-4 w-4" />
           Logout
         </DropdownMenuItem>
       </DropdownMenuContent>
+      <LogoutDialog pending={logout.pending} busy={logout.busy} onConfirm={logout.confirm} onCancel={logout.cancel} />
     </DropdownMenu>
   );
 }

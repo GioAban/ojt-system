@@ -52,62 +52,57 @@ export interface StudentForm {
   course: string;
 }
 
-export interface ImportRow {
-  line: number;
-  studentNumber: string;
-  lastname: string;
-  firstname: string;
-  middleInitial: string | null;
-  gender: string;
-  year: string | null;
-  course: string | null;
-  errors: string[];
-}
-
-export interface ImportPreview {
-  total: number;
-  valid: number;
-  invalid: number;
-  rows: ImportRow[];
-}
-
-export interface ImportCommitResult {
-  created: number;
-  skipped: number;
-  errors: { line: number; message: string }[];
-}
-
+/** Bilang ng registration bawat status */
 export interface EnrollmentLinkState {
   exists: boolean;
   token: string | null;
   open: boolean;
   dueDate: string | null;
   active: boolean;
-  registered: number;
-  total: number;
   pending: number;
+  verified: number;
+  rejected: number;
+  total: number;
+  /** "Also require my approval" */
+  requireApproval: boolean;
+  /** Hindi pa na-verify ang email */
+  awaitingEmail: number;
+  revoked: number;
 }
 
-export type AccountStatus = "pending" | "active" | "none";
+/**
+ * EMAIL_PENDING = hinihintay ang link sa email; PENDING = hinihintay ang approval ng coordinator;
+ * VERIFIED = may account na; REJECTED; REVOKED = inalis ang account
+ */
+export type RegistrationStatus = "EMAIL_PENDING" | "PENDING" | "VERIFIED" | "REJECTED" | "REVOKED";
 
-/** Isang row sa Accounts tab */
-export interface AccountRow {
-  studentId: number;
-  requestId: number | null;
+/** Isang row sa Pending registrations tab */
+export interface RegistrationRow {
+  id: number;
   studentNumber: string;
   lastname: string;
   firstname: string;
   middleInitial: string | null;
   year: string | null;
-  email: string | null;
-  status: AccountStatus;
-  requestedAt: string | null;
-  mustChangePassword: boolean;
+  gender: string;
+  course: string;
+  email: string;
+  status: RegistrationStatus;
+  rejectReason: string | null;
+  createdAt: string | null;
+  decidedAt: string | null;
+  /** Na-verify ng student ang email (false sa mga registration bago nagkaroon ng email) */
+  emailVerified: boolean;
+  /** Kailan huling naipadala ang verification link */
+  linkSentAt: string | null;
+  /** Ang account na nagawa (para sa Revoke) */
+  studentId: number | null;
 }
 
-export interface AcceptAllResult {
-  accepted: number;
+export interface BulkResult {
+  done: number;
   skipped: number;
+  problems: string[];
 }
 
 /** temporaryPassword = default password (ID + initials) */

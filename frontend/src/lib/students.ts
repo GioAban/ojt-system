@@ -1,4 +1,4 @@
-import { PHONE_PATTERN } from "@/lib/company";
+import { contactError } from "@/lib/company";
 import type { StudentForm, StudentRow } from "@/types/students";
 
 export const YEARS = [
@@ -39,11 +39,9 @@ export function validEmail(v: string) {
   return EMAIL.test(v.trim()) ? null : "Enter a valid email.";
 }
 
+/** Contact number ng student: opsyonal, malayang teksto (puwedeng higit sa isang numero); haba lang ang tseke */
 export function validOptionalPhone(v: string) {
-  if (!v.trim()) return null;
-  return PHONE_PATTERN.test(v.trim())
-    ? null
-    : "Use digits, spaces, +, -, or parentheses (7 to 20 characters).";
+  return contactError(v);
 }
 
 /** Nagbabalik ng error bawat field para sa add form */

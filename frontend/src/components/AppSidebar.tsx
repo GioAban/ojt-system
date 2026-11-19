@@ -89,7 +89,6 @@ const coordinatorLinks: SidebarLink[] = [
     icon: ClipboardMinus,
     text: "Reports",
     link: "/coordinator/reports",
-    adminOnly: true,
   },
   {
     icon: Archive,
