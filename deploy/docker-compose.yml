@@ -51,6 +51,16 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      # Kill switch ng offline mode: false = aalisin ng app ang service worker sa susunod na pagbukas
+      APP_SW_ENABLED: ${APP_SW_ENABLED:-true}
+      # Email (verification at forgot password). Walang MAIL_PROVIDER = console lang (walang naipapadala)
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-log}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-OJT System}
+      MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
+      MAIL_SES_REGION: ${MAIL_SES_REGION:-ap-southeast-1}
+      MAIL_SES_CONFIGURATION_SET: ${MAIL_SES_CONFIGURATION_SET:-}
+      APP_WEB_URL: ${APP_WEB_URL:-http://localhost}
       SPRING_JPA_SHOW_SQL: "false"
 
   web:

@@ -123,6 +123,22 @@ cd ~/practicum && (palitan ang backend/ o frontend/ files)
 cd deploy && docker compose --env-file .env up -d --build
 ```
 
+## 9b. Email (AWS SES)
+
+Ginagamit sa verification ng registration at sa Forgot password. HTTPS lang (walang SMTP port).
+
+1. SES (region **ap-southeast-1**) -> Identities -> Create identity -> Domain `practicum-app-cite.com`, Easy DKIM (RSA 2048).
+2. Sa Cloudflare DNS: idagdag ang 3 CNAME ng DKIM (**DNS only**), isang TXT na `_dmarc` (`v=DMARC1; p=none; rua=mailto:<iyong email>`),
+   at kung wala pa, SPF TXT sa `@`: `v=spf1 include:amazonses.com ~all`.
+3. Hintayin ang "Verified". Habang **sandbox** pa: i-verify din ang sarili mong email bilang identity (doon lang makakapagpadala).
+4. Idagdag ang `SendMail` statement ng `iam-policy.json` sa policy ng IAM user ng app (palitan ang `<ACCOUNT_ID>`).
+5. Sa `.env`: `MAIL_PROVIDER=ses`, `MAIL_FROM`, `MAIL_FROM_NAME` (naka-quote), `APP_WEB_URL=https://practicum-app-cite.com`.
+   `docker compose --env-file .env up -d`. Sa log: `Email provider: ses (from no-reply@...)`.
+6. SES -> Account dashboard -> **Request production access** (transactional, verification at password reset lang).
+
+Bounce/complaint: naka-on na ang account-level suppression list ng SES. Para sa susunod: configuration set
+(`MAIL_SES_CONFIGURATION_SET`) -> SNS topic -> HTTPS endpoint sa app na nagmamarka ng "Email bounced".
+
 ## 10. Bantay
 
 - AWS Billing: budget alert (~$30) at tingnan kung bumababa ang credits sa Lightsail.
@@ -132,6 +148,6 @@ cd deploy && docker compose --env-file .env up -d --build
 
 ## Hindi pa kasama
 
-- Mailer/verification (hiwalay na gawain).
+- Bounce/complaint handling ng email (tingnan ang 9b).
 - Presigned upload papunta sa S3 (para hindi dumaan sa backend ang mga file).
 - Load test (k6) bago ang malaking launch.

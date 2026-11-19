@@ -1,0 +1,10 @@
+{{college}} - OJT System
+
+{{heading}}
+
+{{body}}
+{{button}}
+{{note}}
+
+--
+Sent by the {{college}} OJT System.

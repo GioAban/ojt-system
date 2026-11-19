@@ -95,15 +95,15 @@
 			<version>0.12.6</version>
 			<scope>runtime</scope>
 		</dependency>
-		<dependency>
-			<groupId>org.apache.poi</groupId>
-			<artifactId>poi-ooxml</artifactId>
-			<version>5.4.1</version>
-		</dependency>
 		<!-- AWS S3 (presigned links ng mga na-upload na file) -->
 		<dependency>
 			<groupId>software.amazon.awssdk</groupId>
 			<artifactId>s3</artifactId>
+		</dependency>
+		<!-- AWS SES v2 (verification at password reset na email, sa HTTPS) -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>sesv2</artifactId>
 		</dependency>
 	</dependencies>
 	<build>
