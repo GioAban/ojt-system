@@ -150,6 +150,8 @@ function DtrEditorBody({
     await saveDtr({
       key, owner: c.studentName, content: c, header: headerRef.current,
       clientUpdatedAt: stampRef.current, dirty,
+      // Para malaman sa logout at sa Sync center kung kanino ang draft (offline mode)
+      ownerEmail: localStorage.getItem("email")?.toLowerCase() ?? undefined,
     });
   }, [key]);
 

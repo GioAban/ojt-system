@@ -21,6 +21,27 @@ export function isPasswordOk() {
   }
 }
 
+/** Alalahanin sa session na kumpleto na ang profile (o hindi kailangan) */
+function profileKey() {
+  return `profile_ok:${localStorage.getItem("email") ?? ""}`;
+}
+
+export function markProfileOk() {
+  try {
+    sessionStorage.setItem(profileKey(), "1");
+  } catch {
+    // walang storage: titingnan na lang ulit
+  }
+}
+
+export function isProfileOk() {
+  try {
+    return sessionStorage.getItem(profileKey()) === "1";
+  } catch {
+    return false;
+  }
+}
+
 /** Itinatabi ang kailangan ng sidebar (anong mga link ang ipapakita) */
 export function rememberProfile(p: StudentProfile) {
   try {

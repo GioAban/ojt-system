@@ -110,7 +110,7 @@ public class StudentWeeklyDraftController {
                 ((nz(s.getFirstname()) + " " + nz(s.getLastname())).trim()),
                 course,
                 dept == null || dept.getCompany() == null ? "" : nz(dept.getCompany().getName()),
-                dept == null || "N/A".equalsIgnoreCase(nz(dept.getName())) ? "" : nz(dept.getName()),
+                dept == null ? "" : SupervisorResolver.departmentLabel(dept.getName()),
                 semesterLabel(s.getSemester()),
                 college == null ? "" : nz(college.getAbbreviation()),
                 week.getMonthFrom() == null ? "" : week.getMonthFrom().toString(),

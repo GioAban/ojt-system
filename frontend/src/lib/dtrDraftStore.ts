@@ -53,6 +53,8 @@ export interface StoredDtr {
   header: DtrHeader | null;
   clientUpdatedAt: number;
   dirty: boolean;
+  /** Email ng may-ari (para sa logout at Sync center); wala sa mga lumang draft */
+  ownerEmail?: string;
 }
 
 const DB_NAME = "practicum-dtr";

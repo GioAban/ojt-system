@@ -134,7 +134,7 @@ public class StudentDtrDraftController {
                 course,
                 nz(s.getYear()),
                 companyLine,
-                dept == null || "N/A".equalsIgnoreCase(nz(dept.getName())) ? "" : nz(dept.getName()),
+                dept == null ? "" : SupervisorResolver.departmentLabel(dept.getName()),
                 semesterLabel(s.getSemester()),
                 college == null ? "" : nz(college.getAbbreviation()),
                 college == null || college.getLogo() == null || college.getLogo().isBlank() ? ""
